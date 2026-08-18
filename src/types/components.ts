@@ -31,10 +31,15 @@ export interface SchemaFormWidgets {
   Array?: ComponentType<SchemaFormArrayProps>;
 }
 
+export interface SchemaFormOptions {
+  defaults?: "all" | "required-only";
+}
+
 export interface SchemaFormProps {
   schema: JSONSchema;
   peerSchemas?: PeerSchemasInput;
   widgets?: SchemaFormWidgets;
+  options?: SchemaFormOptions;
   data?: OutputData;
   onChange?: (data: OutputData, fieldPointer: string, prev: any, next: any) => void;
 }

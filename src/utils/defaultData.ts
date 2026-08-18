@@ -1,7 +1,18 @@
 import type { JSONSchema } from "../types/schema";
 
-export function createDefaultValueFromSchema(schema: JSONSchema): unknown {
-  if (schema.default !== undefined) {
+export interface DefaultGenerationOptions {
+  defaults?: "all" | "required-only";
+}
+
+export function createDefaultValueFromSchema(
+  schema: JSONSchema,
+  options?: DefaultGenerationOptions,
+  isRequiredField = true
+): unknown {
+  const defaultsMode = options?.defaults ?? "all";
+  const shouldUseSchemaDefault = defaultsMode === "all" || isRequiredField;
+
+  if (shouldUseSchemaDefault && schema.default !== undefined) {
     return schema.default;
   }
 
@@ -14,8 +25,12 @@ export function createDefaultValueFromSchema(schema: JSONSchema): unknown {
       const properties = schema.properties ?? {};
 
       for (const [key, childSchema] of Object.entries(properties)) {
-        if (required.has(key) || childSchema.default !== undefined) {
-          result[key] = createDefaultValueFromSchema(childSchema);
+        const childIsRequired = required.has(key);
+        const shouldIncludeField =
+          childIsRequired || (defaultsMode === "all" && childSchema.default !== undefined);
+
+        if (shouldIncludeField) {
+          result[key] = createDefaultValueFromSchema(childSchema, options, childIsRequired);
         }
       }
 

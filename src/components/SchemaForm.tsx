@@ -7,7 +7,7 @@ import { resolveSchemaRefs } from "../utils/refResolver";
 import { validateDataOrThrow, validatePeerSchemasOrThrow, validateSchemaOrThrow } from "../utils/schemaValidation";
 import { SchemaFieldRenderer } from "./SchemaFieldRenderer";
 
-export function SchemaForm({ schema, peerSchemas, widgets, data, onChange }: SchemaFormProps) {
+export function SchemaForm({ schema, peerSchemas, widgets, options, data, onChange }: SchemaFormProps) {
   const resolvedSchema = useMemo(() => {
     validateSchemaOrThrow(schema, "schema");
     validatePeerSchemasOrThrow(peerSchemas);
@@ -20,9 +20,11 @@ export function SchemaForm({ schema, peerSchemas, widgets, data, onChange }: Sch
       return data;
     }
 
-    const fallback = createDefaultValueFromSchema(resolvedSchema);
+    const fallback = createDefaultValueFromSchema(resolvedSchema, {
+      defaults: options?.defaults ?? "all"
+    });
     return fallback ?? {};
-  }, [data, resolvedSchema]);
+  }, [data, options?.defaults, resolvedSchema]);
 
   const [formData, setFormData] = useState<OutputData>(initialData);
 
