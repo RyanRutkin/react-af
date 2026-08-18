@@ -41,10 +41,16 @@ export default function App() {
     const parsed = parseJson<OutputData>(dataInput);
     if (parsed.valid) {
         setData(parsed.value);
-        return parsed.value;
+        return parsed;
     }
-    return undefined;
+    return {
+        valid: true,
+        value: undefined,
+        error: ''
+    };
   }, [dataInput]);
+
+  const activeData = parsedData.valid ? parsedData.value : undefined;
 
   const prettyData = useMemo(() => JSON.stringify(data, null, 2), [data]);
 
@@ -83,13 +89,7 @@ export default function App() {
                 value={dataInput}
                 onChange={(event) => setDataInput(event.target.value)}
               />
-              {
-                parsedData && (
-                    <>
-                        {!parsedData.valid ? <div className="play-error">{parsedData.error}</div> : null}
-                    </>
-                )
-              }
+              {!parsedData.valid ? <div className="play-error">{parsedData.error}</div> : null}
             </div>
           </div>
 
@@ -98,10 +98,9 @@ export default function App() {
               <SchemaForm
                 schema={parsedSchema.value}
                 peerSchemas={peerSchemasArray}
-                data={parsedData}
+                data={activeData}
                 onChange={(nextData, fieldPointer, prev, next) => {
                   setData(nextData);
-                  setDataInput(JSON.stringify(nextData, null, 2));
                   setLastEvent(`Changed ${fieldPointer || "/"}: ${JSON.stringify(prev)} -> ${JSON.stringify(next)}`);
                 }}
               />

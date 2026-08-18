@@ -28,6 +28,7 @@ export function SchemaForm({ schema, peerSchemas, widgets, data, onChange }: Sch
 
   useEffect(() => {
     setFormData(initialData);
+    onChange?.(initialData, "", undefined, initialData);
   }, [initialData]);
 
   const handleFieldChange = (pointer: string, next: unknown) => {
