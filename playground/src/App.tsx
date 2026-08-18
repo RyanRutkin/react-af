@@ -83,7 +83,13 @@ export default function App() {
                 value={dataInput}
                 onChange={(event) => setDataInput(event.target.value)}
               />
-              {!parsedData.valid ? <div className="play-error">{parsedData.error}</div> : null}
+              {
+                parsedData && (
+                    <>
+                        {!parsedData.valid ? <div className="play-error">{parsedData.error}</div> : null}
+                    </>
+                )
+              }
             </div>
           </div>
 
