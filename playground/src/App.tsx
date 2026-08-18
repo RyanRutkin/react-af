@@ -34,14 +34,17 @@ export default function App() {
   const [data, setData] = useState<OutputData>(initialProfileData);
   const [lastEvent, setLastEvent] = useState("No changes yet.");
   const [schemaInput, setSchemaInput] = useState(() => JSON.stringify(profileSchema, null, 2));
-  const [dataInput, setDataInput] = useState(() => {
-    return JSON.stringify(initialProfileData || {}, null, 2);
-  });
+  const [dataInput, setDataInput] = useState(() => JSON.stringify(initialProfileData, null, 2));
 
   const parsedSchema = useMemo(() => parseJson<JSONSchema>(schemaInput), [schemaInput]);
-  const parsedData = useMemo(() => parseJson<OutputData>(dataInput), [dataInput]);
-
-  const activeData = parsedData.valid ? parsedData.value : data;
+  const parsedData = useMemo(() => {
+    const parsed = parseJson<OutputData>(dataInput);
+    if (parsed.valid) {
+        setData(parsed.value);
+        return parsed.value;
+    }
+    return undefined;
+  }, [dataInput]);
 
   const prettyData = useMemo(() => JSON.stringify(data, null, 2), [data]);
 
@@ -89,7 +92,7 @@ export default function App() {
               <SchemaForm
                 schema={parsedSchema.value}
                 peerSchemas={peerSchemasArray}
-                data={activeData}
+                data={parsedData}
                 onChange={(nextData, fieldPointer, prev, next) => {
                   setData(nextData);
                   setDataInput(JSON.stringify(nextData, null, 2));
