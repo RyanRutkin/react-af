@@ -34,7 +34,9 @@ export default function App() {
   const [data, setData] = useState<OutputData>(initialProfileData);
   const [lastEvent, setLastEvent] = useState("No changes yet.");
   const [schemaInput, setSchemaInput] = useState(() => JSON.stringify(profileSchema, null, 2));
-  const [dataInput, setDataInput] = useState(() => JSON.stringify(initialProfileData, null, 2));
+  const [dataInput, setDataInput] = useState(() => {
+    return JSON.stringify(initialProfileData || {}, null, 2);
+  });
 
   const parsedSchema = useMemo(() => parseJson<JSONSchema>(schemaInput), [schemaInput]);
   const parsedData = useMemo(() => parseJson<OutputData>(dataInput), [dataInput]);
