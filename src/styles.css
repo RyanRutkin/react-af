@@ -1,0 +1,137 @@
+.raf-schema-form {
+  --raf-color-border: #d9dce1;
+  --raf-color-border-focus: #1976d2;
+  --raf-color-label: #2a3340;
+  --raf-color-muted: #6c7684;
+  --raf-color-surface: #ffffff;
+  --raf-color-surface-alt: #f8f9fb;
+  --raf-color-danger: #b42318;
+  --raf-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.08);
+  --raf-shadow-md: 0 8px 20px rgba(16, 24, 40, 0.08);
+  color: #101828;
+  font-family: "Segoe UI", "Helvetica Neue", Helvetica, sans-serif;
+}
+
+.raf-field {
+  margin-bottom: 14px;
+}
+
+.raf-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.raf-field-label {
+  color: var(--raf-color-label);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.raf-field-required {
+  color: var(--raf-color-danger);
+  margin-left: 3px;
+}
+
+.raf-field-optional {
+  color: var(--raf-color-muted);
+  font-size: 0.74rem;
+}
+
+.raf-input,
+.raf-select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--raf-color-border);
+  background: var(--raf-color-surface);
+  border-radius: 10px;
+  font-size: 0.95rem;
+  padding: 10px 12px;
+  color: #101828;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+  box-shadow: var(--raf-shadow-sm);
+}
+
+.raf-input:focus,
+.raf-select:focus {
+  border-color: var(--raf-color-border-focus);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.15);
+}
+
+.raf-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+
+.raf-checkbox {
+  width: 16px;
+  height: 16px;
+}
+
+.raf-object {
+  border: 1px solid var(--raf-color-border);
+  border-radius: 12px;
+  background: var(--raf-color-surface-alt);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.raf-object-summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 600;
+  color: var(--raf-color-label);
+  user-select: none;
+}
+
+.raf-object-content {
+  padding: 10px 12px 2px 12px;
+}
+
+.raf-array-item {
+  border: 1px solid var(--raf-color-border);
+  border-radius: 10px;
+  background: var(--raf-color-surface);
+  box-shadow: var(--raf-shadow-sm);
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.raf-button {
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.raf-button-primary {
+  background: #1976d2;
+  color: #ffffff;
+}
+
+.raf-button-secondary {
+  background: #eef2f6;
+  color: #1d2939;
+}
+
+.raf-button-danger {
+  background: #fee4e2;
+  color: #b42318;
+}
+
+.raf-button-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.raf-muted {
+  color: var(--raf-color-muted);
+  font-size: 0.85rem;
+}

@@ -1,0 +1,21 @@
+import type { PropsWithChildren } from "react";
+
+interface FieldShellProps {
+  label: string;
+  required: boolean;
+}
+
+export function FieldShell({ label, required, children }: PropsWithChildren<FieldShellProps>) {
+  return (
+    <div className="raf-field">
+      <div className="raf-field-label-row">
+        <label className="raf-field-label">
+          {label}
+          {required ? <span className="raf-field-required">*</span> : null}
+        </label>
+        {!required ? <span className="raf-field-optional">Optional</span> : null}
+      </div>
+      {children}
+    </div>
+  );
+}
