@@ -60,7 +60,7 @@ jobs:
 
       - name: Install playground dependencies
         working-directory: playground
-        run: npm ci
+        run: npm install
 
       - name: Run playground tests
         working-directory: playground
