@@ -44,8 +44,13 @@ export interface SchemaFormProps {
   widgets?: SchemaFormWidgets;
   options?: SchemaFormOptions;
   data?: OutputData;
-  onChange?: (data: OutputData, fieldPointer: string, prev: any, next: any) => void;
-  onValidationError?: (errors: SchemaFormValidationError[]) => void;
+  onChange?: (
+    data: OutputData,
+    validationErrors: SchemaFormValidationError[],
+    fieldPointer: string,
+    prev: any,
+    next: any
+  ) => void;
 }
 
 export interface SchemaFormValidationError {
@@ -56,8 +61,7 @@ export interface SchemaFormValidationError {
 export interface SchemaBuilderProps {
   schema?: JSONSchema;
   domain?: string;
-  onChange?: (schema: JSONSchema) => void;
-  onValidationError?: (errors: SchemaBuilderValidationError[]) => void;
+  onChange?: (schema: JSONSchema, validationErrors: SchemaBuilderValidationError[]) => void;
 }
 
 export interface SchemaBuilderValidationError {

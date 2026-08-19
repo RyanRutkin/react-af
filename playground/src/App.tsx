@@ -112,10 +112,14 @@ export default function App() {
                 schema={parsedSchema.value}
                 peerSchemas={peerSchemasArray}
                 data={activeData}
-                onValidationError={(errors: SchemaFormValidationError[]) => {
-                  setFormValidationErrors(errors);
-                }}
-                onChange={(nextData: OutputData, fieldPointer: string, prev: unknown, next: unknown) => {
+                onChange={(
+                  nextData: OutputData,
+                  validationErrors: SchemaFormValidationError[],
+                  fieldPointer: string,
+                  prev: unknown,
+                  next: unknown
+                ) => {
+                  setFormValidationErrors(validationErrors);
                   setData(nextData);
                   setLastEvent(`Changed ${fieldPointer || "/"}: ${JSON.stringify(prev)} -> ${JSON.stringify(next)}`);
                 }}
@@ -135,13 +139,11 @@ export default function App() {
         </section>
 
         <section className="play-panel">
-          <h2>SchemaBuilder Placeholder</h2>
+          <h2>SchemaBuilder</h2>
           <SchemaBuilder
-            onChange={(nextSchema: JSONSchema) => {
+            onChange={(nextSchema: JSONSchema, validationErrors: SchemaBuilderValidationError[]) => {
               setBuilderSchema(nextSchema);
-            }}
-            onValidationError={(errors: SchemaBuilderValidationError[]) => {
-              setBuilderValidationErrors(errors);
+              setBuilderValidationErrors(validationErrors);
             }}
             domain="https://ryanrutkin.github.io/react-af/playground/example/"
           />
@@ -175,11 +177,8 @@ export default function App() {
                 <SchemaForm
                   schema={builderSchema}
                   data={builderPreviewData}
-                  onValidationError={(errors: SchemaFormValidationError[]) => {
-                    console.log("SchemaForm validation errors in SchemaBuilder preview:", errors);
-                    setBuilderPreviewErrors(errors);
-                  }}
-                  onChange={(nextData: OutputData) => {
+                  onChange={(nextData: OutputData, validationErrors: SchemaFormValidationError[]) => {
+                    setBuilderPreviewErrors(validationErrors);
                     setBuilderPreviewData(nextData);
                   }}
                 />

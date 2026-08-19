@@ -9,12 +9,11 @@ const FIELD_TYPES: JSONSchemaType[] = ["string", "number", "integer", "boolean",
 
 const DEFAULT_SCHEMA_URI = "https://json-schema.org/draft/2020-12/schema";
 
-export function SchemaBuilder({ schema, domain, onChange, onValidationError }: SchemaBuilderProps) {
+export function SchemaBuilder({ schema, domain, onChange }: SchemaBuilderProps) {
   const [currentSchema, setCurrentSchema] = useState<JSONSchema>(() => schema ?? createDefaultRootSchema());
   const [rawJson, setRawJson] = useState(() => JSON.stringify(schema ?? createDefaultRootSchema(), null, 2));
   const [rawJsonError, setRawJsonError] = useState<string | null>(null);
   const onChangeRef = useRef(onChange);
-  const onValidationErrorRef = useRef(onValidationError);
   const publishedSchema = useMemo(() => {
     const sanitized = sanitizeSchemaForOutput(currentSchema);
     return applyDomainToRootId(sanitized, domain);
@@ -22,8 +21,7 @@ export function SchemaBuilder({ schema, domain, onChange, onValidationError }: S
 
   useEffect(() => {
     onChangeRef.current = onChange;
-    onValidationErrorRef.current = onValidationError;
-  }, [onChange, onValidationError]);
+  }, [onChange]);
 
   useEffect(() => {
     if (schema) {
@@ -34,10 +32,7 @@ export function SchemaBuilder({ schema, domain, onChange, onValidationError }: S
   useEffect(() => {
     setRawJson(JSON.stringify(currentSchema, null, 2));
     const validationErrors = validateSchemaDefinition(publishedSchema);
-    if (validationErrors.length > 0) {
-      onValidationErrorRef.current?.(validationErrors);
-    }
-    onChangeRef.current?.(publishedSchema);
+    onChangeRef.current?.(publishedSchema, validationErrors);
   }, [currentSchema, publishedSchema]);
 
   const handleRootChange = (nextSchema: JSONSchema) => {
@@ -71,7 +66,7 @@ export function SchemaBuilder({ schema, domain, onChange, onValidationError }: S
                 if (!isObject(parsed)) {
                   const message = "Schema JSON must be an object.";
                   setRawJsonError(message);
-                  onValidationErrorRef.current?.([
+                  onChangeRef.current?.(publishedSchema, [
                     {
                       message,
                       source: "json-parse"
@@ -85,7 +80,7 @@ export function SchemaBuilder({ schema, domain, onChange, onValidationError }: S
               } catch (error) {
                 const message = error instanceof Error ? error.message : "Invalid JSON.";
                 setRawJsonError(message);
-                onValidationErrorRef.current?.([
+                onChangeRef.current?.(publishedSchema, [
                   {
                     message,
                     source: "json-parse"
