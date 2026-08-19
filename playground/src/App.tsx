@@ -1,5 +1,12 @@
 import { Component, type ReactNode, useMemo, useState } from "react";
-import { SchemaBuilder, SchemaForm, type JSONSchema, type OutputData } from "react-af";
+import {
+  SchemaBuilder,
+  SchemaForm,
+  type JSONSchema,
+  type OutputData,
+  type SchemaBuilderValidationError,
+  type SchemaFormValidationError
+} from "react-af";
 import { initialProfileData, peerSchemasArray, profileSchema } from "./examples/schemas";
 import "./playground.css";
 
@@ -33,6 +40,12 @@ class FormErrorBoundary extends Component<{ children: ReactNode }, { message: st
 export default function App() {
   const [data, setData] = useState<OutputData>(initialProfileData);
   const [lastEvent, setLastEvent] = useState("No changes yet.");
+  const [builderSchema, setBuilderSchema] = useState<JSONSchema | null>(null);
+  const [builderResultMode, setBuilderResultMode] = useState<"form" | "json">("form");
+  const [builderPreviewData, setBuilderPreviewData] = useState<OutputData | undefined>(undefined);
+  const [builderPreviewErrors, setBuilderPreviewErrors] = useState<SchemaFormValidationError[]>([]);
+  const [formValidationErrors, setFormValidationErrors] = useState<SchemaFormValidationError[]>([]);
+  const [builderValidationErrors, setBuilderValidationErrors] = useState<SchemaBuilderValidationError[]>([]);
   const [schemaInput, setSchemaInput] = useState(() => JSON.stringify(profileSchema, null, 2));
   const [dataInput, setDataInput] = useState(() => JSON.stringify(initialProfileData, null, 2));
 
@@ -40,13 +53,13 @@ export default function App() {
   const parsedData = useMemo(() => {
     const parsed = parseJson<OutputData>(dataInput);
     if (parsed.valid) {
-        setData(parsed.value);
-        return parsed;
+      setData(parsed.value);
+      return parsed;
     }
     return {
-        valid: true,
-        value: undefined,
-        error: ''
+      valid: true,
+      value: undefined,
+      error: ""
     };
   }, [dataInput]);
 
@@ -99,7 +112,10 @@ export default function App() {
                 schema={parsedSchema.value}
                 peerSchemas={peerSchemasArray}
                 data={activeData}
-                onChange={(nextData, fieldPointer, prev, next) => {
+                onValidationError={(errors: SchemaFormValidationError[]) => {
+                  setFormValidationErrors(errors);
+                }}
+                onChange={(nextData: OutputData, fieldPointer: string, prev: unknown, next: unknown) => {
                   setData(nextData);
                   setLastEvent(`Changed ${fieldPointer || "/"}: ${JSON.stringify(prev)} -> ${JSON.stringify(next)}`);
                 }}
@@ -108,6 +124,8 @@ export default function App() {
           ) : (
             <div className="play-error">Schema input must be valid JSON to render the form.</div>
           )}
+
+          <ValidationErrorList title="SchemaForm Validation Errors" errors={formValidationErrors} />
         </section>
 
         <section className="play-panel">
@@ -118,8 +136,64 @@ export default function App() {
 
         <section className="play-panel">
           <h2>SchemaBuilder Placeholder</h2>
-          <SchemaBuilder />
+          <SchemaBuilder
+            onChange={(nextSchema: JSONSchema) => {
+              setBuilderSchema(nextSchema);
+            }}
+            onValidationError={(errors: SchemaBuilderValidationError[]) => {
+              setBuilderValidationErrors(errors);
+            }}
+            domain="https://ryanrutkin.github.io/react-af/playground/example/"
+          />
+          <ValidationErrorList title="SchemaBuilder Validation Errors" errors={builderValidationErrors} />
           <p className="play-note">SchemaBuilder details are pending and can be added in the next prompt.</p>
+        </section>
+
+        <section className="play-panel">
+          <h2>SchemaBuilder Result</h2>
+          <div className="play-event">Live schema emitted from SchemaBuilder onChange.</div>
+          <div className="play-toggle-row">
+            <button
+              type="button"
+              className={`play-toggle-button ${builderResultMode === "form" ? "play-toggle-button-active" : ""}`}
+              onClick={() => setBuilderResultMode("form")}
+            >
+              Form
+            </button>
+            <button
+              type="button"
+              className={`play-toggle-button ${builderResultMode === "json" ? "play-toggle-button-active" : ""}`}
+              onClick={() => setBuilderResultMode("json")}
+            >
+              JSON
+            </button>
+          </div>
+
+          {builderResultMode === "form" ? (
+            builderSchema ? (
+              <FormErrorBoundary>
+                <SchemaForm
+                  schema={builderSchema}
+                  data={builderPreviewData}
+                  onValidationError={(errors: SchemaFormValidationError[]) => {
+                    console.log("SchemaForm validation errors in SchemaBuilder preview:", errors);
+                    setBuilderPreviewErrors(errors);
+                  }}
+                  onChange={(nextData: OutputData) => {
+                    setBuilderPreviewData(nextData);
+                  }}
+                />
+              </FormErrorBoundary>
+            ) : (
+              <div className="play-error">No schema changes yet.</div>
+            )
+          ) : (
+            <pre className="play-json">{builderSchema ? JSON.stringify(builderSchema, null, 2) : "No schema changes yet."}</pre>
+          )}
+
+          {builderResultMode === "form" ? (
+            <ValidationErrorList title="Result Form Validation Errors" errors={builderPreviewErrors} />
+          ) : null}
         </section>
       </main>
     </div>
@@ -133,4 +207,23 @@ function parseJson<T>(value: string): { valid: true; value: T } | { valid: false
     const message = error instanceof Error ? error.message : "Invalid JSON";
     return { valid: false, error: message };
   }
+}
+
+function ValidationErrorList({ title, errors }: { title: string; errors: Array<{ message: string; source: string }> }) {
+  return (
+    <div className="play-validation-section">
+      <h3>{title}</h3>
+      {errors.length === 0 ? (
+        <div className="play-validation-empty">No validation errors.</div>
+      ) : (
+        <ul className="play-validation-list">
+          {errors.map((error, index) => (
+            <li key={`${error.source}-${error.message}-${index}`}>
+              <span className="play-validation-source">[{error.source}]</span> {error.message}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }

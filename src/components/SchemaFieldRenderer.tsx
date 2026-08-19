@@ -1,3 +1,4 @@
+import type { ComponentType } from "react";
 import { SchemaFormArray } from "./fields/SchemaFormArray";
 import { SchemaFormBoolean } from "./fields/SchemaFormBoolean";
 import { SchemaFormInteger } from "./fields/SchemaFormInteger";
@@ -6,7 +7,7 @@ import { SchemaFormNumber } from "./fields/SchemaFormNumber";
 import { SchemaFormObject } from "./fields/SchemaFormObject";
 import { SchemaFormSelect } from "./fields/SchemaFormSelect";
 import { SchemaFormString } from "./fields/SchemaFormString";
-import type { SchemaFormWidgets } from "../types/components";
+import type { FieldComponentProps, SchemaFormArrayProps, SchemaFormObjectProps, SchemaFormWidgets } from "../types/components";
 import type { JSONSchema } from "../types/schema";
 import { createDefaultValueFromSchema } from "../utils/defaultData";
 import { joinPointer } from "../utils/jsonPointer";
@@ -16,17 +17,19 @@ interface SchemaFieldRendererProps {
   label: string;
   required: boolean;
   pointer: string;
+  schemaPointer: string;
   value: unknown;
   onChange: (pointer: string, next: unknown) => void;
   widgets?: SchemaFormWidgets;
 }
 
 export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
-  const { schema, label, required, pointer, value, onChange, widgets } = props;
+  const { schema, label, required, pointer, schemaPointer, value, onChange, widgets } = props;
   const type = resolveType(schema);
 
   if (type === "object") {
-    const ObjectWidget = widgets?.Object ?? SchemaFormObject;
+    const ObjectWidget =
+      getSchemaPointerWidget<SchemaFormObjectProps>(widgets, schemaPointer) ?? widgets?.Object ?? SchemaFormObject;
     const objectValue = isObject(value) ? value : {};
     const requiredKeys = new Set(schema.required ?? []);
     const properties = schema.properties ?? {};
@@ -42,6 +45,7 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
       >
         {Object.entries(properties).map(([propertyName, propertySchema]) => {
           const childPointer = joinPointer(pointer, propertyName);
+          const childSchemaPointer = joinPointer(joinPointer(schemaPointer, "properties"), propertyName);
           const childValue = objectValue[propertyName];
 
           return (
@@ -51,6 +55,7 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
               label={propertySchema.title ?? propertyName}
               required={requiredKeys.has(propertyName)}
               pointer={childPointer}
+              schemaPointer={childSchemaPointer}
               value={childValue}
               onChange={onChange}
               widgets={widgets}
@@ -62,9 +67,11 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
   }
 
   if (type === "array") {
-    const ArrayWidget = widgets?.Array ?? SchemaFormArray;
+    const ArrayWidget =
+      getSchemaPointerWidget<SchemaFormArrayProps>(widgets, schemaPointer) ?? widgets?.Array ?? SchemaFormArray;
     const arrayValue = Array.isArray(value) ? value : [];
     const itemsSchema = Array.isArray(schema.items) ? schema.items[0] : schema.items;
+    const itemsSchemaPointer = joinPointer(schemaPointer, "items");
 
     return (
       <ArrayWidget
@@ -82,6 +89,7 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
             label={`Item ${index + 1}`}
             required={true}
             pointer={itemPointer}
+            schemaPointer={itemsSchemaPointer}
             value={itemValue}
             onChange={onChange}
             widgets={widgets}
@@ -92,7 +100,10 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
   }
 
   if (type === "boolean") {
-    const BooleanWidget = widgets?.Boolean ?? SchemaFormBoolean;
+    const BooleanWidget =
+      getSchemaPointerWidget<FieldComponentProps<boolean>>(widgets, schemaPointer) ??
+      widgets?.Boolean ??
+      SchemaFormBoolean;
     return (
       <BooleanWidget
         label={label}
@@ -106,7 +117,10 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
   }
 
   if (type === "number") {
-    const NumberWidget = widgets?.Number ?? SchemaFormNumber;
+    const NumberWidget =
+      getSchemaPointerWidget<FieldComponentProps<number | undefined>>(widgets, schemaPointer) ??
+      widgets?.Number ??
+      SchemaFormNumber;
     return (
       <NumberWidget
         label={label}
@@ -120,7 +134,10 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
   }
 
   if (type === "integer") {
-    const IntegerWidget = widgets?.Integer ?? SchemaFormInteger;
+    const IntegerWidget =
+      getSchemaPointerWidget<FieldComponentProps<number | undefined>>(widgets, schemaPointer) ??
+      widgets?.Integer ??
+      SchemaFormInteger;
     return (
       <IntegerWidget
         label={label}
@@ -134,7 +151,8 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
   }
 
   if (type === "null") {
-    const NullWidget = widgets?.Null ?? SchemaFormNull;
+    const NullWidget =
+      getSchemaPointerWidget<FieldComponentProps<null>>(widgets, schemaPointer) ?? widgets?.Null ?? SchemaFormNull;
     return (
       <NullWidget
         label={label}
@@ -148,7 +166,8 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
   }
 
   if (type === "string" && Array.isArray(schema.enum)) {
-    const SelectWidget = widgets?.Select ?? SchemaFormSelect;
+    const SelectWidget =
+      getSchemaPointerWidget<FieldComponentProps<string>>(widgets, schemaPointer) ?? widgets?.Select ?? SchemaFormSelect;
     return (
       <SelectWidget
         label={label}
@@ -161,7 +180,8 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
     );
   }
 
-  const StringWidget = widgets?.String ?? SchemaFormString;
+  const StringWidget =
+    getSchemaPointerWidget<FieldComponentProps<string>>(widgets, schemaPointer) ?? widgets?.String ?? SchemaFormString;
   return (
     <StringWidget
       label={label}
@@ -172,6 +192,22 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
       onChange={(next) => onChange(pointer, next)}
     />
   );
+}
+
+function getSchemaPointerWidget<TProps>(
+  widgets: SchemaFormWidgets | undefined,
+  schemaPointer: string
+): ComponentType<TProps> | undefined {
+  if (!widgets) {
+    return undefined;
+  }
+
+  const candidate = widgets[schemaPointer];
+  if (!candidate) {
+    return undefined;
+  }
+
+  return candidate as ComponentType<TProps>;
 }
 
 function resolveType(schema: JSONSchema): string {

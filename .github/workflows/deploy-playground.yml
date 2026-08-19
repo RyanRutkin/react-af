@@ -62,6 +62,10 @@ jobs:
         working-directory: playground
         run: npm ci
 
+      - name: Run playground tests
+        working-directory: playground
+        run: npm test
+
       - name: Build playground
         working-directory: playground
         run: npm run build

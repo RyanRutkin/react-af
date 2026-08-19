@@ -119,6 +119,64 @@ body {
   font-size: 0.85rem;
 }
 
+.play-validation-section {
+  margin-top: 12px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  padding: 10px;
+  background: #f9fafb;
+}
+
+.play-validation-section h3 {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  color: #344054;
+}
+
+.play-validation-empty {
+  color: #475467;
+  font-size: 0.86rem;
+}
+
+.play-validation-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #b42318;
+}
+
+.play-validation-list li {
+  margin-bottom: 6px;
+  font-size: 0.86rem;
+}
+
+.play-validation-source {
+  color: #9f1239;
+  font-weight: 600;
+}
+
+.play-toggle-row {
+  display: inline-flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.play-toggle-button {
+  border: 1px solid #cfd7e3;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  background: #ffffff;
+  color: #344054;
+  cursor: pointer;
+}
+
+.play-toggle-button-active {
+  background: #0d5ea8;
+  color: #ffffff;
+  border-color: #0d5ea8;
+}
+
 @media (min-width: 960px) {
   .play-panel:nth-child(1) {
     grid-column: span 7;
@@ -129,7 +187,11 @@ body {
   }
 
   .play-panel:nth-child(3) {
-    grid-column: span 12;
+    grid-column: span 6;
+  }
+
+  .play-panel:nth-child(4) {
+    grid-column: span 6;
   }
 
   .play-input-grid {
