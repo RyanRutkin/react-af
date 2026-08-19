@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 
@@ -31,8 +31,14 @@ describe("Playground regression guards", () => {
       const tupleTypeSelects = await screen.findAllByRole("combobox");
       await user.selectOptions(tupleTypeSelects[tupleTypeSelects.length - 1], "number");
 
-      const addItemButton = await screen.findByRole("button", { name: "Add Item" });
-      await user.click(addItemButton);
+      const resultHeading = await screen.findByRole("heading", { name: "SchemaBuilder Result" });
+      const resultSection = resultHeading.closest("section");
+      expect(resultSection).not.toBeNull();
+
+      const addItemButtons = await within(resultSection as HTMLElement).findAllByRole("button", {
+        name: "Add Item"
+      });
+      await user.click(addItemButtons[addItemButtons.length - 1]);
 
       expect(screen.queryByText("SchemaForm failed to render.")).toBeNull();
       expect(
