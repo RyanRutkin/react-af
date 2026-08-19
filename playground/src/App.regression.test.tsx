@@ -9,40 +9,40 @@ describe("Playground regression guards", () => {
     try {
       render(<App />);
 
-      const addPropertyButtons = await screen.findAllByRole("button", { name: "Add Property" });
-      await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
-
-      const propertyNameInputs = await screen.findAllByDisplayValue("field");
-      const propertyNameInput = propertyNameInputs[propertyNameInputs.length - 1];
-      await user.clear(propertyNameInput);
-      await user.type(propertyNameInput, "numbers");
-
-      const typeSelects = await screen.findAllByRole("combobox");
-      await user.selectOptions(typeSelects[typeSelects.length - 1], "array");
-
-      const minItemsInputs = await screen.findAllByPlaceholderText("e.g. 0");
-      const minItemsInput = minItemsInputs[minItemsInputs.length - 1];
-      await user.clear(minItemsInput);
-      await user.type(minItemsInput, "5");
-
-      const switchButtons = await screen.findAllByRole("button", { name: "Switch To Tuple Items" });
-      await user.click(switchButtons[switchButtons.length - 1]);
-
-      const tupleTypeSelects = await screen.findAllByRole("combobox");
-      await user.selectOptions(tupleTypeSelects[tupleTypeSelects.length - 1], "number");
-
       const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
       const builderSection = builderHeading.closest("section");
       expect(builderSection).not.toBeNull();
+      const builder = within(builderSection as HTMLElement);
 
-      await within(builderSection as HTMLElement).findByRole("button", {
-        name: "Switch To Single Schema Item"
+      const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+      await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+      const propertyHeading = await builder.findByText(/Property:\s*field/i);
+      const propertyEditor = propertyHeading.closest("details");
+      expect(propertyEditor).not.toBeNull();
+      const property = within(propertyEditor as HTMLElement);
+
+      const propertyTypeSelects = await property.findAllByRole("combobox");
+      await user.selectOptions(propertyTypeSelects[0], "array");
+
+      const minItemsInput = await property.findByRole("spinbutton", { name: "minItems" });
+      await user.clear(minItemsInput);
+      await user.type(minItemsInput, "5");
+
+      const switchButton = await property.findByRole("button", { name: "Switch To Tuple Items" });
+      await user.click(switchButton);
+
+      const tupleTypeSelects = await property.findAllByRole("combobox");
+      await user.selectOptions(tupleTypeSelects[tupleTypeSelects.length - 1], "number");
+
+      await property.findByRole("button", {
+        name: /Switch To Single (Items )?Schema/i
       });
 
-      const addItemButtons = await within(builderSection as HTMLElement).findAllByRole("button", {
-        name: "Add Item"
+      const addTupleButtons = await property.findAllByRole("button", {
+        name: "Add Tuple Item Schema"
       });
-      await user.click(addItemButtons[addItemButtons.length - 1]);
+      await user.click(addTupleButtons[addTupleButtons.length - 1]);
 
       expect(screen.queryByText("SchemaForm failed to render.")).toBeNull();
       expect(
