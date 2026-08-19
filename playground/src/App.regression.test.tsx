@@ -31,11 +31,15 @@ describe("Playground regression guards", () => {
       const tupleTypeSelects = await screen.findAllByRole("combobox");
       await user.selectOptions(tupleTypeSelects[tupleTypeSelects.length - 1], "number");
 
-      const resultHeading = await screen.findByRole("heading", { name: "SchemaBuilder Result" });
-      const resultSection = resultHeading.closest("section");
-      expect(resultSection).not.toBeNull();
+      const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+      const builderSection = builderHeading.closest("section");
+      expect(builderSection).not.toBeNull();
 
-      const addItemButtons = await within(resultSection as HTMLElement).findAllByRole("button", {
+      await within(builderSection as HTMLElement).findByRole("button", {
+        name: "Switch To Single Schema Item"
+      });
+
+      const addItemButtons = await within(builderSection as HTMLElement).findAllByRole("button", {
         name: "Add Item"
       });
       await user.click(addItemButtons[addItemButtons.length - 1]);
