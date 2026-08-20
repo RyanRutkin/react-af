@@ -2,12 +2,21 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 
+async function showSchemaBuilder(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "Showcase SchemaBuilder" }));
+}
+
+async function showSchemaForm(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "Showcase SchemaForm" }));
+}
+
 describe("Playground regression guards", () => {
   it("keeps SchemaBuilder result Form mode stable when adding an array item", async () => {
     const user = userEvent.setup();
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       render(<App />);
+      await showSchemaBuilder(user);
 
       const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
       const builderSection = builderHeading.closest("section");
@@ -64,6 +73,7 @@ describe("Playground regression guards", () => {
   it("shows validation errors for const/enum type mismatch and const not in enum", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await showSchemaBuilder(user);
 
     const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
     const builderSection = builderHeading.closest("section");
@@ -109,6 +119,7 @@ describe("Playground regression guards", () => {
   it("parses quoted and escaped string enum entries from comma-separated input", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await showSchemaBuilder(user);
 
     const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
     const builderSection = builderHeading.closest("section");
@@ -142,6 +153,7 @@ describe("Playground regression guards", () => {
   it("switches Const to select for numeric enum and clears previous const", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await showSchemaBuilder(user);
 
     const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
     const builderSection = builderHeading.closest("section");
@@ -180,6 +192,7 @@ describe("Playground regression guards", () => {
   it("supports const and enum editing for multi-type fields", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await showSchemaBuilder(user);
 
     const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
     const builderSection = builderHeading.closest("section");
@@ -219,6 +232,7 @@ describe("Playground regression guards", () => {
   it("allows comma after numeric token while typing multi-type enum", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await showSchemaBuilder(user);
 
     const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
     const builderSection = builderHeading.closest("section");
@@ -432,10 +446,7 @@ describe("Playground regression guards", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const formHeading = await screen.findByRole("heading", { name: "SchemaForm Demo" });
-    const formSection = formHeading.closest("section");
-    expect(formSection).not.toBeNull();
-    const form = within(formSection as HTMLElement);
+    await showSchemaBuilder(user);
 
     const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
     const builderSection = builderHeading.closest("section");
@@ -460,6 +471,13 @@ describe("Playground regression guards", () => {
 
     const tupleItemEditors = await property.findAllByText(/Tuple Item \d+/i);
     expect(tupleItemEditors.length).toBeGreaterThanOrEqual(1);
+
+    await showSchemaForm(user);
+
+    const formHeading = await screen.findByRole("heading", { name: "SchemaForm Demo" });
+    const formSection = formHeading.closest("section");
+    expect(formSection).not.toBeNull();
+    const form = within(formSection as HTMLElement);
 
     const schemaInput = await screen.findByLabelText("Schema Input (JSON)");
     const dataInput = await screen.findByLabelText("Data Input (JSON)");
@@ -503,6 +521,7 @@ describe("Playground regression guards", () => {
   it("supports if/then/else schemas in SchemaBuilder output", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await showSchemaBuilder(user);
 
     const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
     const builderSection = builderHeading.closest("section");
@@ -528,6 +547,7 @@ describe("Playground regression guards", () => {
   it("supports minLength, maxLength, and format for string fields in SchemaBuilder output", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await showSchemaBuilder(user);
 
     const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
     const builderSection = builderHeading.closest("section");

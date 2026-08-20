@@ -40,6 +40,7 @@ class FormErrorBoundary extends Component<{ children: ReactNode }, { message: st
 export default function App() {
   const [data, setData] = useState<OutputData>(initialProfileData);
   const [lastEvent, setLastEvent] = useState("No changes yet.");
+  const [showcaseMode, setShowcaseMode] = useState<"form" | "builder">("form");
   const [builderSchema, setBuilderSchema] = useState<JSONSchema | null>(null);
   const [builderResultMode, setBuilderResultMode] = useState<"form" | "json">("form");
   const [builderPreviewData, setBuilderPreviewData] = useState<OutputData | undefined>(undefined);
@@ -72,128 +73,150 @@ export default function App() {
       <header className="play-header">
         <h1>React AF Playground</h1>
         <p>Interactive environment for testing SchemaForm behavior and previewing SchemaBuilder export.</p>
+        <div className="play-showcase-toggle" aria-label="Playground showcase mode">
+          <button
+            type="button"
+            className={`play-toggle-button ${showcaseMode === "form" ? "play-toggle-button-active" : ""}`}
+            onClick={() => setShowcaseMode("form")}
+          >
+            Showcase SchemaForm
+          </button>
+          <button
+            type="button"
+            className={`play-toggle-button ${showcaseMode === "builder" ? "play-toggle-button-active" : ""}`}
+            onClick={() => setShowcaseMode("builder")}
+          >
+            Showcase SchemaBuilder
+          </button>
+        </div>
       </header>
 
       <main className="play-layout">
-        <section className="play-panel">
-          <h2>SchemaForm Demo</h2>
-          <p className="play-note">Edit the JSON below to provide a schema and data input for the form renderer.</p>
-          <div className="play-input-grid">
-            <div>
-              <label className="play-input-label" htmlFor="schema-input">
-                Schema Input (JSON)
-              </label>
-              <textarea
-                id="schema-input"
-                className="play-textarea"
-                value={schemaInput}
-                onChange={(event) => setSchemaInput(event.target.value)}
-              />
-              {!parsedSchema.valid ? <div className="play-error">{parsedSchema.error}</div> : null}
-            </div>
+        {showcaseMode === "form" ? (
+          <>
+            <section className="play-panel">
+              <h2>SchemaForm Demo</h2>
+              <p className="play-note">Edit the JSON below to provide a schema and data input for the form renderer.</p>
+              <div className="play-input-grid">
+                <div>
+                  <label className="play-input-label" htmlFor="schema-input">
+                    Schema Input (JSON)
+                  </label>
+                  <textarea
+                    id="schema-input"
+                    className="play-textarea"
+                    value={schemaInput}
+                    onChange={(event) => setSchemaInput(event.target.value)}
+                  />
+                  {!parsedSchema.valid ? <div className="play-error">{parsedSchema.error}</div> : null}
+                </div>
 
-            <div>
-              <label className="play-input-label" htmlFor="data-input">
-                Data Input (JSON)
-              </label>
-              <textarea
-                id="data-input"
-                className="play-textarea"
-                value={dataInput}
-                onChange={(event) => setDataInput(event.target.value)}
-              />
-              {!parsedData.valid ? <div className="play-error">{parsedData.error}</div> : null}
-            </div>
-          </div>
+                <div>
+                  <label className="play-input-label" htmlFor="data-input">
+                    Data Input (JSON)
+                  </label>
+                  <textarea
+                    id="data-input"
+                    className="play-textarea"
+                    value={dataInput}
+                    onChange={(event) => setDataInput(event.target.value)}
+                  />
+                  {!parsedData.valid ? <div className="play-error">{parsedData.error}</div> : null}
+                </div>
+              </div>
 
-          {parsedSchema.valid ? (
-            <FormErrorBoundary>
-              <SchemaForm
-                schema={parsedSchema.value}
-                peerSchemas={peerSchemasArray}
-                data={activeData}
-                onChange={(
-                  nextData: OutputData,
-                  validationErrors: SchemaFormValidationError[],
-                  fieldPointer: string,
-                  prev: unknown,
-                  next: unknown
-                ) => {
-                  setFormValidationErrors(validationErrors);
-                  setData(nextData);
-                  setLastEvent(`Changed ${fieldPointer || "/"}: ${JSON.stringify(prev)} -> ${JSON.stringify(next)}`);
+              {parsedSchema.valid ? (
+                <FormErrorBoundary>
+                  <SchemaForm
+                    schema={parsedSchema.value}
+                    peerSchemas={peerSchemasArray}
+                    data={activeData}
+                    onChange={(
+                      nextData: OutputData,
+                      validationErrors: SchemaFormValidationError[],
+                      fieldPointer: string,
+                      prev: unknown,
+                      next: unknown
+                    ) => {
+                      setFormValidationErrors(validationErrors);
+                      setData(nextData);
+                      setLastEvent(`Changed ${fieldPointer || "/"}: ${JSON.stringify(prev)} -> ${JSON.stringify(next)}`);
+                    }}
+                  />
+                </FormErrorBoundary>
+              ) : (
+                <div className="play-error">Schema input must be valid JSON to render the form.</div>
+              )}
+
+              <ValidationErrorList title="SchemaForm Validation Errors" errors={formValidationErrors} />
+            </section>
+
+            <section className="play-panel">
+              <h2>Result Data</h2>
+              <div className="play-event">{lastEvent}</div>
+              <pre className="play-json">{prettyData}</pre>
+            </section>
+          </>
+        ) : (
+          <>
+            <section className="play-panel">
+              <h2>SchemaBuilder</h2>
+              <SchemaBuilder
+                onChange={(nextSchema: JSONSchema, validationErrors: SchemaBuilderValidationError[]) => {
+                  setBuilderSchema(nextSchema);
+                  setBuilderValidationErrors(validationErrors);
                 }}
+                domain="https://ryanrutkin.github.io/react-af/playground/example/"
               />
-            </FormErrorBoundary>
-          ) : (
-            <div className="play-error">Schema input must be valid JSON to render the form.</div>
-          )}
+              <ValidationErrorList title="SchemaBuilder Validation Errors" errors={builderValidationErrors} />
+              <p className="play-note">SchemaBuilder details are pending and can be added in the next prompt.</p>
+            </section>
 
-          <ValidationErrorList title="SchemaForm Validation Errors" errors={formValidationErrors} />
-        </section>
+            <section className="play-panel">
+              <h2>SchemaBuilder Result</h2>
+              <div className="play-event">Live schema emitted from SchemaBuilder onChange.</div>
+              <div className="play-toggle-row">
+                <button
+                  type="button"
+                  className={`play-toggle-button ${builderResultMode === "form" ? "play-toggle-button-active" : ""}`}
+                  onClick={() => setBuilderResultMode("form")}
+                >
+                  Form
+                </button>
+                <button
+                  type="button"
+                  className={`play-toggle-button ${builderResultMode === "json" ? "play-toggle-button-active" : ""}`}
+                  onClick={() => setBuilderResultMode("json")}
+                >
+                  JSON
+                </button>
+              </div>
 
-        <section className="play-panel">
-          <h2>Result Data</h2>
-          <div className="play-event">{lastEvent}</div>
-          <pre className="play-json">{prettyData}</pre>
-        </section>
+              {builderResultMode === "form" ? (
+                builderSchema ? (
+                  <FormErrorBoundary>
+                    <SchemaForm
+                      schema={builderSchema}
+                      data={builderPreviewData}
+                      onChange={(nextData: OutputData, validationErrors: SchemaFormValidationError[]) => {
+                        setBuilderPreviewErrors(validationErrors);
+                        setBuilderPreviewData(nextData);
+                      }}
+                    />
+                  </FormErrorBoundary>
+                ) : (
+                  <div className="play-error">No schema changes yet.</div>
+                )
+              ) : (
+                <pre className="play-json">{builderSchema ? JSON.stringify(builderSchema, null, 2) : "No schema changes yet."}</pre>
+              )}
 
-        <section className="play-panel">
-          <h2>SchemaBuilder</h2>
-          <SchemaBuilder
-            onChange={(nextSchema: JSONSchema, validationErrors: SchemaBuilderValidationError[]) => {
-              setBuilderSchema(nextSchema);
-              setBuilderValidationErrors(validationErrors);
-            }}
-            domain="https://ryanrutkin.github.io/react-af/playground/example/"
-          />
-          <ValidationErrorList title="SchemaBuilder Validation Errors" errors={builderValidationErrors} />
-          <p className="play-note">SchemaBuilder details are pending and can be added in the next prompt.</p>
-        </section>
-
-        <section className="play-panel">
-          <h2>SchemaBuilder Result</h2>
-          <div className="play-event">Live schema emitted from SchemaBuilder onChange.</div>
-          <div className="play-toggle-row">
-            <button
-              type="button"
-              className={`play-toggle-button ${builderResultMode === "form" ? "play-toggle-button-active" : ""}`}
-              onClick={() => setBuilderResultMode("form")}
-            >
-              Form
-            </button>
-            <button
-              type="button"
-              className={`play-toggle-button ${builderResultMode === "json" ? "play-toggle-button-active" : ""}`}
-              onClick={() => setBuilderResultMode("json")}
-            >
-              JSON
-            </button>
-          </div>
-
-          {builderResultMode === "form" ? (
-            builderSchema ? (
-              <FormErrorBoundary>
-                <SchemaForm
-                  schema={builderSchema}
-                  data={builderPreviewData}
-                  onChange={(nextData: OutputData, validationErrors: SchemaFormValidationError[]) => {
-                    setBuilderPreviewErrors(validationErrors);
-                    setBuilderPreviewData(nextData);
-                  }}
-                />
-              </FormErrorBoundary>
-            ) : (
-              <div className="play-error">No schema changes yet.</div>
-            )
-          ) : (
-            <pre className="play-json">{builderSchema ? JSON.stringify(builderSchema, null, 2) : "No schema changes yet."}</pre>
-          )}
-
-          {builderResultMode === "form" ? (
-            <ValidationErrorList title="Result Form Validation Errors" errors={builderPreviewErrors} />
-          ) : null}
-        </section>
+              {builderResultMode === "form" ? (
+                <ValidationErrorList title="Result Form Validation Errors" errors={builderPreviewErrors} />
+              ) : null}
+            </section>
+          </>
+        )}
       </main>
     </div>
   );
