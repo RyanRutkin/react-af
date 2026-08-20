@@ -60,6 +60,21 @@
   box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.15);
 }
 
+.raf-input:disabled,
+.raf-select:disabled,
+.raf-textarea:disabled {
+  background: #eef2f6;
+  border-color: #c7ced8;
+  color: #667085;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.raf-input:disabled::placeholder,
+.raf-textarea:disabled::placeholder {
+  color: #98a2b3;
+}
+
 .raf-checkbox-row {
   display: flex;
   align-items: center;
@@ -70,6 +85,15 @@
 .raf-checkbox {
   width: 16px;
   height: 16px;
+}
+
+.raf-checkbox:disabled {
+  cursor: not-allowed;
+  accent-color: #98a2b3;
+}
+
+.raf-checkbox:disabled + span {
+  color: #98a2b3;
 }
 
 .raf-object {
@@ -110,6 +134,12 @@
   font-weight: 600;
 }
 
+.raf-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: grayscale(15%);
+}
+
 .raf-button-primary {
   background: #1976d2;
   color: #ffffff;
@@ -129,6 +159,26 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.raf-button-row[aria-label$="type chooser"] {
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+
+.raf-button-row[aria-label$="type chooser"] .raf-button {
+  padding: 6px 10px;
+  border: 1px solid #d0d5dd;
+  background: #f8fafc;
+  color: #344054;
+  box-shadow: none;
+}
+
+.raf-button-row[aria-label$="type chooser"] .raf-button[aria-pressed="true"] {
+  background: #e8f1fb;
+  border-color: #98b8e8;
+  color: #1849a9;
 }
 
 .raf-muted {

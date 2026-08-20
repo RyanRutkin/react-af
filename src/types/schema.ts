@@ -11,7 +11,8 @@ export interface JSONSchema {
   default?: unknown;
   properties?: Record<string, JSONSchema>;
   required?: string[];
-  items?: JSONSchema | JSONSchema[];
+  items?: JSONSchema | boolean;
+  prefixItems?: JSONSchema[];
   additionalProperties?: boolean | JSONSchema;
   oneOf?: JSONSchema[];
   anyOf?: JSONSchema[];

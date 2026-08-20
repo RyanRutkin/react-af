@@ -7,6 +7,8 @@ export interface FieldComponentProps<TValue = unknown> {
   pointer: string;
   schema: JSONSchema;
   value: TValue;
+  disabled?: boolean;
+  controls?: ReactNode;
   onChange: (next: TValue) => void;
 }
 
@@ -16,6 +18,9 @@ export interface SchemaFormObjectProps extends FieldComponentProps<Record<string
 
 export interface SchemaFormArrayProps extends FieldComponentProps<unknown[]> {
   itemsSchema?: JSONSchema;
+  itemSchemas?: JSONSchema[];
+  canAddItem?: boolean;
+  canRemoveItems?: boolean;
   renderItem: (index: number, pointer: string, value: unknown) => ReactNode;
   createDefaultItem: () => unknown;
 }
@@ -25,7 +30,7 @@ export type SchemaPointerWidget = ComponentType<any>;
 export interface SchemaFormWidgets {
   [schemaPointer: string]: SchemaPointerWidget | undefined;
   String?: ComponentType<FieldComponentProps<string>>;
-  Select?: ComponentType<FieldComponentProps<string>>;
+  Select?: ComponentType<FieldComponentProps<unknown>>;
   Boolean?: ComponentType<FieldComponentProps<boolean>>;
   Number?: ComponentType<FieldComponentProps<number | undefined>>;
   Integer?: ComponentType<FieldComponentProps<number | undefined>>;

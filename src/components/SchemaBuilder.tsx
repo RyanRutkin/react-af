@@ -114,6 +114,7 @@ interface SchemaNodeEditorProps {
 
 function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, domain }: SchemaNodeEditorProps) {
   const schemaTypes = getSchemaTypes(schema);
+  const primaryType = schemaTypes.length === 1 ? schemaTypes[0] : undefined;
   const hasType = (type: JSONSchemaType) => schemaTypes.includes(type);
   const editableRootId = isRoot ? toLocalId(stringOrEmpty(schema.$id), domain) : stringOrEmpty(schema.$id);
   const fullRootId = isRoot ? toFullId(editableRootId, domain) : editableRootId;
@@ -160,54 +161,31 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
         <div className="raf-builder-grid">
           <TypeListEditor
             value={schemaTypes}
-            onChange={(nextTypes) => onChange(applyTypes(schema, nextTypes))}
-          />
-          <TextInput
-            label="Default (JSON)"
-            value={schema.default === undefined ? "" : toInlineJson(schema.default)}
-            onChange={(value) => {
-              if (value.trim() === "") {
-                const next = cloneSchema(schema);
-                delete next.default;
-                onChange(next);
-                return;
-              }
-
-              try {
-                const parsed = JSON.parse(value);
-                onChange({ ...schema, default: parsed });
-              } catch {
-                // Ignore invalid JSON while user is typing.
-              }
+            onChange={(nextTypes) => {
+              const next = applyTypes(schema, nextTypes);
+              delete next.const;
+              delete next.enum;
+              onChange(next);
             }}
+          />
+          <JsonTextInput
+            label="Default (JSON)"
+            value={schema.default}
             placeholder='e.g. "abc", 42, true, {"k":"v"}'
+            onClear={() => {
+              const next = cloneSchema(schema);
+              delete next.default;
+              onChange(next);
+            }}
+            onValidJson={(parsed) => {
+              onChange({ ...schema, default: parsed });
+            }}
           />
         </div>
 
-        {(hasType("string") || hasType("number") || hasType("integer")) ? (
-          <TextInput
-            label="Enum (JSON array)"
-            value={Array.isArray(schema.enum) ? JSON.stringify(schema.enum) : ""}
-            onChange={(value) => {
-              if (value.trim() === "") {
-                const next = cloneSchema(schema);
-                delete next.enum;
-                onChange(next);
-                return;
-              }
+        <ConstEditor schema={schema} schemaTypes={schemaTypes} primaryType={primaryType} onChange={onChange} />
 
-              try {
-                const parsed = JSON.parse(value);
-                if (Array.isArray(parsed)) {
-                  onChange({ ...schema, enum: parsed });
-                }
-              } catch {
-                // Ignore invalid JSON while user is typing.
-              }
-            }}
-            placeholder='e.g. ["A", "B"]'
-          />
-        ) : null}
+        <EnumEditor schema={schema} schemaTypes={schemaTypes} primaryType={primaryType} onChange={onChange} />
 
         {hasType("string") ? (
           <TextInput
@@ -405,12 +383,17 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
 }
 
 function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange: (next: JSONSchema) => void }) {
-  const items = schema.items;
+  const tupleItems = Array.isArray(schema.prefixItems)
+    ? schema.prefixItems
+    : Array.isArray(schema.items)
+      ? schema.items
+      : undefined;
+  const items = !Array.isArray(schema.items) && isObject(schema.items) ? schema.items : undefined;
   const hasContains = isObject(schema.contains);
 
   return (
     <div className="raf-builder-block">
-      {Array.isArray(items) ? (
+      {tupleItems ? (
         <>
           <h4 className="raf-builder-heading">Array Items (Tuple)</h4>
           <div className="raf-button-row">
@@ -419,9 +402,14 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
               type="button"
               onClick={() => {
                 const next = cloneSchema(schema);
-                const nextItems = Array.isArray(next.items) ? [...next.items] : [];
+                const nextItems = Array.isArray(next.prefixItems)
+                  ? [...next.prefixItems]
+                  : Array.isArray(next.items)
+                    ? [...next.items]
+                    : [];
                 nextItems.push({ type: "string" });
-                next.items = nextItems;
+                next.prefixItems = nextItems;
+                next.items = false;
                 onChange(next);
               }}
             >
@@ -429,23 +417,33 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
             </button>
           </div>
 
-          {items.map((itemSchema, index) => (
+          {tupleItems.map((itemSchema, index) => (
             <SchemaNodeEditor
               key={`tuple-item-${index}`}
               label={`Tuple Item ${index + 1}`}
               schema={itemSchema}
               onChange={(nextItemSchema) => {
                 const next = cloneSchema(schema);
-                const nextItems = Array.isArray(next.items) ? [...next.items] : [];
+                const nextItems = Array.isArray(next.prefixItems)
+                  ? [...next.prefixItems]
+                  : Array.isArray(next.items)
+                    ? [...next.items]
+                    : [];
                 nextItems[index] = nextItemSchema;
-                next.items = nextItems;
+                next.prefixItems = nextItems;
+                next.items = false;
                 onChange(next);
               }}
               onRemove={() => {
                 const next = cloneSchema(schema);
-                const nextItems = Array.isArray(next.items) ? [...next.items] : [];
+                const nextItems = Array.isArray(next.prefixItems)
+                  ? [...next.prefixItems]
+                  : Array.isArray(next.items)
+                    ? [...next.items]
+                    : [];
                 nextItems.splice(index, 1);
-                next.items = nextItems;
+                next.prefixItems = nextItems;
+                next.items = false;
                 onChange(next);
               }}
             />
@@ -458,6 +456,7 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
               onClick={() => {
                 const next = cloneSchema(schema);
                 next.items = { type: "string" };
+                delete next.prefixItems;
                 onChange(next);
               }}
             >
@@ -475,6 +474,7 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
             onChange={(nextItemsSchema) => {
               const next = cloneSchema(schema);
               next.items = nextItemsSchema;
+              delete next.prefixItems;
               onChange(next);
             }}
           />
@@ -485,7 +485,8 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
               type="button"
               onClick={() => {
                 const next = cloneSchema(schema);
-                next.items = [{ type: "string" }];
+                next.prefixItems = [{ type: "string" }];
+                next.items = false;
                 onChange(next);
               }}
             >
@@ -791,6 +792,616 @@ function TextAreaInput({ label, value, onChange }: { label: string; value: strin
   );
 }
 
+function JsonTextInput({
+  label,
+  value,
+  onValidJson,
+  onClear,
+  onInvalidJsonText,
+  stringValueDisplay = "json",
+  placeholder
+}: {
+  label: string;
+  value: unknown;
+  onValidJson: (parsed: unknown) => void;
+  onClear: () => void;
+  onInvalidJsonText?: (rawText: string) => void;
+  stringValueDisplay?: "json" | "raw";
+  placeholder?: string;
+}) {
+  const serializedValue =
+    value === undefined
+      ? ""
+      : stringValueDisplay === "raw" && typeof value === "string"
+        ? value
+        : toInlineJson(value);
+  const [draftValue, setDraftValue] = useState(serializedValue);
+
+  useEffect(() => {
+    setDraftValue(serializedValue);
+  }, [serializedValue]);
+
+  return (
+    <TextInput
+      label={label}
+      value={draftValue}
+      onChange={(nextText) => {
+        setDraftValue(nextText);
+
+        if (nextText.trim() === "") {
+          onClear();
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(nextText);
+          onValidJson(parsed);
+        } catch {
+          onInvalidJsonText?.(nextText);
+        }
+      }}
+      placeholder={placeholder}
+    />
+  );
+}
+
+function ConstEditor({
+  schema,
+  schemaTypes,
+  primaryType,
+  onChange
+}: {
+  schema: JSONSchema;
+  schemaTypes: JSONSchemaType[];
+  primaryType?: JSONSchemaType;
+  onChange: (next: JSONSchema) => void;
+}) {
+  if (primaryType === "null" && schemaTypes.length === 1) {
+    return null;
+  }
+
+  const enumValues = Array.isArray(schema.enum) ? schema.enum : undefined;
+
+  if (enumValues && enumValues.length > 0) {
+    const selectedIndex = enumValues.findIndex((entry) => deepEqual(entry, schema.const));
+
+    return (
+      <label className="raf-field">
+        <div className="raf-field-label-row">
+          <span className="raf-field-label">Const</span>
+        </div>
+        <select
+          className="raf-select raf-builder-control"
+          value={selectedIndex >= 0 ? String(selectedIndex) : ""}
+          onChange={(event) => {
+            const indexValue = event.target.value;
+            const next = cloneSchema(schema);
+
+            if (indexValue === "") {
+              delete next.const;
+              onChange(next);
+              return;
+            }
+
+            const index = Number(indexValue);
+            if (!Number.isInteger(index) || index < 0 || index >= enumValues.length) {
+              return;
+            }
+
+            next.const = cloneSchema(enumValues[index]);
+            onChange(next);
+          }}
+        >
+          <option value="">None</option>
+          {enumValues.map((option, index) => (
+            <option key={`${index}-${String(option)}`} value={String(index)}>
+              {String(option)}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  if (primaryType === "boolean") {
+    return (
+      <label className="raf-checkbox-row">
+        <input
+          className="raf-checkbox"
+          type="checkbox"
+          checked={schema.const === true}
+          onChange={(event) => {
+            const next = cloneSchema(schema);
+            next.const = event.target.checked;
+            onChange(next);
+          }}
+        />
+        <span>Const</span>
+      </label>
+    );
+  }
+
+  if (primaryType === "number" || primaryType === "integer") {
+    return (
+      <TextInput
+        label="Const"
+        type="number"
+        step={primaryType === "integer" ? "1" : "any"}
+        value={typeof schema.const === "number" ? String(schema.const) : ""}
+        placeholder={primaryType === "integer" ? "e.g. 3" : "e.g. 3.14"}
+        onChange={(value) => {
+          const next = cloneSchema(schema);
+
+          if (value.trim() === "") {
+            delete next.const;
+            onChange(next);
+            return;
+          }
+
+          const parsed = Number(value);
+          if (!Number.isFinite(parsed)) {
+            return;
+          }
+
+          if (primaryType === "integer" && !Number.isInteger(parsed)) {
+            return;
+          }
+
+          next.const = parsed;
+          onChange(next);
+        }}
+      />
+    );
+  }
+
+  if (primaryType === "string") {
+    return (
+      <TextInput
+        label="Const"
+        type="text"
+        value={typeof schema.const === "string" ? schema.const : ""}
+        placeholder="e.g. fixed-value"
+        onChange={(value) => {
+          const next = cloneSchema(schema);
+          if (value === "") {
+            delete next.const;
+          } else {
+            next.const = value;
+          }
+          onChange(next);
+        }}
+      />
+    );
+  }
+
+  if (!primaryType) {
+    return (
+      <JsonTextInput
+        label="Const"
+        value={schema.const}
+        stringValueDisplay="raw"
+        placeholder="e.g. A, 2, true, null"
+        onClear={() => {
+          const next = cloneSchema(schema);
+          delete next.const;
+          onChange(next);
+        }}
+        onValidJson={(parsed) => {
+          if (!matchesAnySchemaType(parsed, schemaTypes)) {
+            return;
+          }
+
+          onChange({ ...schema, const: parsed });
+        }}
+        onInvalidJsonText={(rawText) => {
+          const parsed = parseLooseScalarByTypes(rawText, schemaTypes);
+          if (parsed === undefined) {
+            return;
+          }
+
+          onChange({ ...schema, const: parsed });
+        }}
+      />
+    );
+  }
+
+  return (
+    <JsonTextInput
+      label="Const (JSON)"
+      value={schema.const}
+      placeholder='e.g. "fixed-value", 3, true, null, {"k":"v"}'
+      onClear={() => {
+        const next = cloneSchema(schema);
+        delete next.const;
+        onChange(next);
+      }}
+      onValidJson={(parsed) => {
+        onChange({ ...schema, const: parsed });
+      }}
+    />
+  );
+}
+
+function EnumEditor({
+  schema,
+  schemaTypes,
+  primaryType,
+  onChange
+}: {
+  schema: JSONSchema;
+  schemaTypes: JSONSchemaType[];
+  primaryType?: JSONSchemaType;
+  onChange: (next: JSONSchema) => void;
+}) {
+  if (primaryType === "boolean" || primaryType === "null") {
+    return null;
+  }
+
+  if (primaryType === "string") {
+    return (
+      <StringEnumInput
+        value={Array.isArray(schema.enum) ? schema.enum : undefined}
+        onChange={(nextEnum) => {
+          const next = cloneSchema(schema);
+          delete next.const;
+
+          if (!nextEnum || nextEnum.length === 0) {
+            delete next.enum;
+          } else {
+            next.enum = nextEnum;
+          }
+
+          onChange(next);
+        }}
+      />
+    );
+  }
+
+  if (primaryType === "number" || primaryType === "integer") {
+    return (
+      <NumberEnumInput
+        value={Array.isArray(schema.enum) ? schema.enum : undefined}
+        integerOnly={primaryType === "integer"}
+        onChange={(nextEnum) => {
+          const next = cloneSchema(schema);
+          delete next.const;
+
+          if (!nextEnum || nextEnum.length === 0) {
+            delete next.enum;
+          } else {
+            next.enum = nextEnum;
+          }
+
+          onChange(next);
+        }}
+      />
+    );
+  }
+
+  if (!primaryType && schemaTypes.length > 1) {
+    return (
+      <StringEnumInput
+        value={Array.isArray(schema.enum) ? schema.enum : undefined}
+        parseEntry={(entry) => parseLooseScalarByTypes(entry, schemaTypes)}
+        onChange={(nextEnum) => {
+          const next = cloneSchema(schema);
+          delete next.const;
+
+          if (!nextEnum || nextEnum.length === 0) {
+            delete next.enum;
+          } else {
+            next.enum = nextEnum;
+          }
+
+          onChange(next);
+        }}
+      />
+    );
+  }
+
+  return null;
+}
+
+function NumberEnumInput({
+  value,
+  integerOnly,
+  onChange
+}: {
+  value?: unknown[];
+  integerOnly: boolean;
+  onChange: (nextEnum: number[] | undefined) => void;
+}) {
+  const serializedValue = Array.isArray(value) ? JSON.stringify(value) : "";
+  const [draftValue, setDraftValue] = useState(serializedValue);
+  const lastSubmittedSignatureRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const nextSignature = Array.isArray(value) ? JSON.stringify(value) : "";
+    if (lastSubmittedSignatureRef.current === nextSignature) {
+      return;
+    }
+
+    setDraftValue(serializedValue);
+  }, [serializedValue, value]);
+
+  return (
+    <TextInput
+      label="Enum"
+      value={draftValue}
+      placeholder={integerOnly ? "e.g. [1, 2, 3]" : "e.g. [1, 2.5, 3]"}
+      onChange={(nextText) => {
+        if (!/^[\[\]\d,\.\-+\seE]*$/.test(nextText)) {
+          return;
+        }
+
+        setDraftValue(nextText);
+
+        if (nextText.trim() === "") {
+          lastSubmittedSignatureRef.current = "";
+          onChange(undefined);
+          return;
+        }
+
+        const parsed = parseNumberEnum(nextText, integerOnly);
+        if (!parsed) {
+          return;
+        }
+
+        lastSubmittedSignatureRef.current = JSON.stringify(parsed);
+        onChange(parsed);
+      }}
+    />
+  );
+}
+
+
+function parseNumberEnum(input: string, integerOnly: boolean): number[] | null {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const hasWrappedBrackets = trimmed.startsWith("[") && trimmed.endsWith("]");
+  const core = hasWrappedBrackets ? trimmed.slice(1, -1) : trimmed;
+
+  if (core.trim() === "") {
+    return [];
+  }
+
+  const segments = core.split(",").map((entry) => entry.trim());
+  if (segments.some((entry) => entry === "")) {
+    return null;
+  }
+
+  const parsedValues: number[] = [];
+  for (const segment of segments) {
+    const parsed = Number(segment);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+
+    if (integerOnly && !Number.isInteger(parsed)) {
+      return null;
+    }
+
+    parsedValues.push(parsed);
+  }
+
+  return parsedValues;
+}
+function StringEnumInput({
+  value,
+  parseEntry,
+  onChange
+}: {
+  value?: unknown[];
+  parseEntry?: (entry: string) => unknown | undefined;
+  onChange: (nextEnum: unknown[] | undefined) => void;
+}) {
+  const displayValues = Array.isArray(value) ? value.map((entry) => (typeof entry === "string" ? entry : String(entry))) : [];
+  const serializedValue = Array.isArray(value) ? serializeStringEnum(displayValues) : "";
+  const [draftValue, setDraftValue] = useState(serializedValue);
+  const lastSubmittedSignatureRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const nextSignature = Array.isArray(value) ? JSON.stringify(displayValues) : "";
+    if (lastSubmittedSignatureRef.current === nextSignature) {
+      return;
+    }
+
+    setDraftValue(serializedValue);
+  }, [serializedValue, value]);
+
+  return (
+    <TextInput
+      label="Enum"
+      type="text"
+      value={draftValue}
+      placeholder={`e.g. A, B, "C, D", 'E, F'`}
+      onChange={(nextText) => {
+        setDraftValue(nextText);
+
+        if (nextText.trim() === "") {
+          lastSubmittedSignatureRef.current = "";
+          onChange(undefined);
+          return;
+        }
+
+        const parsed = parseStringEnum(nextText);
+        if (!parsed.valid || !parsed.values) {
+          return;
+        }
+
+        const normalizedValues = parsed.values.map((entry) => {
+          if (!parseEntry) {
+            return entry;
+          }
+
+          return parseEntry(entry);
+        });
+
+        if (normalizedValues.some((entry) => entry === undefined)) {
+          return;
+        }
+
+        const typedValues = normalizedValues as unknown[];
+        const submittedSignature = JSON.stringify(
+          typedValues.map((entry) => (typeof entry === "string" ? entry : String(entry)))
+        );
+        lastSubmittedSignatureRef.current = submittedSignature;
+        onChange(typedValues);
+      }}
+    />
+  );
+}
+
+function parseLooseScalarByTypes(value: string, schemaTypes: JSONSchemaType[]): unknown | undefined {
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return undefined;
+  }
+
+  if (schemaTypes.includes("boolean")) {
+    if (trimmed === "true") {
+      return true;
+    }
+    if (trimmed === "false") {
+      return false;
+    }
+  }
+
+  if (schemaTypes.includes("null") && trimmed === "null") {
+    return null;
+  }
+
+  if (schemaTypes.includes("integer")) {
+    const parsedInteger = Number(trimmed);
+    if (Number.isInteger(parsedInteger)) {
+      return parsedInteger;
+    }
+  }
+
+  if (schemaTypes.includes("number")) {
+    const parsedNumber = Number(trimmed);
+    if (Number.isFinite(parsedNumber)) {
+      return parsedNumber;
+    }
+  }
+
+  if (schemaTypes.includes("string")) {
+    return value;
+  }
+
+  return undefined;
+}
+
+function parseStringEnum(input: string): { valid: boolean; values: string[] | null } {
+  const values: string[] = [];
+  let token = "";
+  let inDoubleQuote = false;
+  let inSingleQuote = false;
+  let tokenUsedQuotes = false;
+  let tokenClosedQuote = false;
+
+  const pushToken = () => {
+    const candidate = tokenUsedQuotes ? token : token.trim();
+    if (candidate.length > 0) {
+      values.push(candidate);
+    }
+
+    token = "";
+    tokenUsedQuotes = false;
+    tokenClosedQuote = false;
+  };
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+
+    if (inDoubleQuote) {
+      if (char === '"') {
+        if (token.endsWith("/")) {
+          token = `${token.slice(0, -1)}"`;
+          continue;
+        }
+
+        inDoubleQuote = false;
+        tokenClosedQuote = true;
+        continue;
+      }
+
+      token += char;
+      continue;
+    }
+
+    if (inSingleQuote) {
+      if (char === "'") {
+        if (token.endsWith("/")) {
+          token = `${token.slice(0, -1)}'`;
+          continue;
+        }
+
+        inSingleQuote = false;
+        tokenClosedQuote = true;
+        continue;
+      }
+
+      token += char;
+      continue;
+    }
+
+    if (char === ",") {
+      pushToken();
+      continue;
+    }
+
+    if (char === '"') {
+      if (token.trim().length === 0) {
+        token = "";
+      }
+      inDoubleQuote = true;
+      tokenUsedQuotes = true;
+      continue;
+    }
+
+    if (char === "'") {
+      if (token.trim().length === 0) {
+        token = "";
+      }
+      inSingleQuote = true;
+      tokenUsedQuotes = true;
+      continue;
+    }
+
+    if (tokenClosedQuote && /\s/.test(char)) {
+      continue;
+    }
+
+    token += char;
+  }
+
+  if (inDoubleQuote || inSingleQuote) {
+    return { valid: false, values: null };
+  }
+
+  pushToken();
+
+  return { valid: true, values };
+}
+
+function serializeStringEnum(values: string[]): string {
+  return values
+    .map((value) => {
+      const needsQuotes = value === "" || /[\s,\"']/.test(value);
+      if (!needsQuotes) {
+        return value;
+      }
+
+      const escaped = value.replace(/\"/g, '/"');
+      return `"${escaped}"`;
+    })
+    .join(", ");
+}
+
 function createDefaultRootSchema(): JSONSchema {
   return {
     $schema: DEFAULT_SCHEMA_URI,
@@ -982,7 +1593,12 @@ function sanitizeSchemaForOutput(schema: JSONSchema): JSONSchema {
   }
 
   if (Array.isArray(next.items)) {
-    next.items = next.items.map((itemSchema) => sanitizeSchemaForOutput(itemSchema));
+    next.prefixItems = next.items.map((itemSchema) => sanitizeSchemaForOutput(itemSchema));
+    next.items = false;
+  }
+
+  if (Array.isArray(next.prefixItems)) {
+    next.prefixItems = next.prefixItems.map((itemSchema) => sanitizeSchemaForOutput(itemSchema));
   } else if (isObject(next.items)) {
     next.items = sanitizeSchemaForOutput(next.items as JSONSchema);
   }
@@ -1062,29 +1678,185 @@ function normalizeDomain(domain: string): string {
 }
 
 function validateSchemaDefinition(schema: JSONSchema): SchemaBuilderValidationError[] {
+  const consistencyErrors = validateConstAndEnumConsistency(schema);
+
   try {
     const ajv = createAjvForSchema(schema);
     const valid = ajv.validateSchema(schema);
 
-    if (valid) {
-      return [];
-    }
+    const schemaErrors: SchemaBuilderValidationError[] = valid
+      ? []
+      : (ajv.errors ?? []).map((error) => ({
+          message: error.message ?? "Schema validation error",
+          keyword: error.keyword,
+          instancePath: error.instancePath,
+          schemaPath: error.schemaPath,
+          source: "schema" as const
+        }));
 
-    return (ajv.errors ?? []).map((error) => ({
-      message: error.message ?? "Schema validation error",
-      keyword: error.keyword,
-      instancePath: error.instancePath,
-      schemaPath: error.schemaPath,
-      source: "schema"
-    }));
+    return [...schemaErrors, ...consistencyErrors];
   } catch (error) {
     return [
       {
         message: error instanceof Error ? error.message : "Schema validation failed.",
         source: "schema"
-      }
+      },
+      ...consistencyErrors
     ];
   }
+}
+
+function validateConstAndEnumConsistency(schema: JSONSchema, schemaPointer = ""): SchemaBuilderValidationError[] {
+  const errors: SchemaBuilderValidationError[] = [];
+  const schemaTypes = getSchemaTypes(schema);
+  const hasConst = Object.prototype.hasOwnProperty.call(schema, "const");
+
+  if (hasConst && !matchesAnySchemaType(schema.const, schemaTypes)) {
+    errors.push({
+      message: "const value does not match the field type.",
+      keyword: "const",
+      instancePath: schemaPointer,
+      schemaPath: `${schemaPointer}/const`,
+      source: "schema"
+    });
+  }
+
+  if (schema.enum !== undefined) {
+    if (!Array.isArray(schema.enum)) {
+      errors.push({
+        message: "enum must be an array.",
+        keyword: "enum",
+        instancePath: schemaPointer,
+        schemaPath: `${schemaPointer}/enum`,
+        source: "schema"
+      });
+    } else {
+      schema.enum.forEach((enumValue, index) => {
+        if (!matchesAnySchemaType(enumValue, schemaTypes)) {
+          errors.push({
+            message: `enum value at index ${index} does not match the field type.`,
+            keyword: "enum",
+            instancePath: schemaPointer,
+            schemaPath: `${schemaPointer}/enum/${index}`,
+            source: "schema"
+          });
+        }
+      });
+
+      if (hasConst && !schema.enum.some((entry) => deepEqual(entry, schema.const))) {
+        errors.push({
+          message: "const value must exist in enum when both are provided.",
+          keyword: "const",
+          instancePath: schemaPointer,
+          schemaPath: `${schemaPointer}/const`,
+          source: "schema"
+        });
+      }
+    }
+  }
+
+  if (schema.properties) {
+    for (const [propertyName, propertySchema] of Object.entries(schema.properties)) {
+      errors.push(
+        ...validateConstAndEnumConsistency(
+          propertySchema,
+          `${schemaPointer}/properties/${escapeJsonPointerToken(propertyName)}`
+        )
+      );
+    }
+  }
+
+  if (Array.isArray(schema.items)) {
+    schema.items.forEach((itemSchema, index) => {
+      errors.push(...validateConstAndEnumConsistency(itemSchema, `${schemaPointer}/items/${index}`));
+    });
+  } else if (isObject(schema.items)) {
+    errors.push(...validateConstAndEnumConsistency(schema.items as JSONSchema, `${schemaPointer}/items`));
+  }
+
+  if (isObject(schema.contains)) {
+    errors.push(...validateConstAndEnumConsistency(schema.contains as JSONSchema, `${schemaPointer}/contains`));
+  }
+
+  for (const combinatorKey of ["allOf", "anyOf", "oneOf"] as const) {
+    const entries = schema[combinatorKey];
+    if (!Array.isArray(entries)) {
+      continue;
+    }
+
+    entries.forEach((entry, index) => {
+      errors.push(...validateConstAndEnumConsistency(entry, `${schemaPointer}/${combinatorKey}/${index}`));
+    });
+  }
+
+  return errors;
+}
+
+function matchesAnySchemaType(value: unknown, schemaTypes: JSONSchemaType[]): boolean {
+  return schemaTypes.some((schemaType) => matchesSchemaType(value, schemaType));
+}
+
+function matchesSchemaType(value: unknown, schemaType: JSONSchemaType): boolean {
+  if (schemaType === "string") {
+    return typeof value === "string";
+  }
+
+  if (schemaType === "number") {
+    return typeof value === "number" && Number.isFinite(value);
+  }
+
+  if (schemaType === "integer") {
+    return typeof value === "number" && Number.isInteger(value);
+  }
+
+  if (schemaType === "boolean") {
+    return typeof value === "boolean";
+  }
+
+  if (schemaType === "null") {
+    return value === null;
+  }
+
+  if (schemaType === "array") {
+    return Array.isArray(value);
+  }
+
+  return isObject(value);
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true;
+  }
+
+  if (typeof a !== typeof b) {
+    return false;
+  }
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) {
+      return false;
+    }
+
+    return a.every((entry, index) => deepEqual(entry, b[index]));
+  }
+
+  if (isObject(a) && isObject(b)) {
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+
+    if (keysA.length !== keysB.length) {
+      return false;
+    }
+
+    return keysA.every((key) => deepEqual(a[key], b[key]));
+  }
+
+  return false;
+}
+
+function escapeJsonPointerToken(value: string): string {
+  return value.replace(/~/g, "~0").replace(/\//g, "~1");
 }
 
 function numberOrEmpty(value: unknown): string {

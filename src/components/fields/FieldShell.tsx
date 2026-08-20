@@ -3,9 +3,10 @@ import type { PropsWithChildren } from "react";
 interface FieldShellProps {
   label: string;
   required: boolean;
+  controls?: ReactNode;
 }
 
-export function FieldShell({ label, required, children }: PropsWithChildren<FieldShellProps>) {
+export function FieldShell({ label, required, controls, children }: PropsWithChildren<FieldShellProps>) {
   return (
     <div className="raf-field">
       <div className="raf-field-label-row">
@@ -15,6 +16,7 @@ export function FieldShell({ label, required, children }: PropsWithChildren<Fiel
         </label>
         {!required ? <span className="raf-field-optional">Optional</span> : null}
       </div>
+      {controls ? <div className="raf-button-row">{controls}</div> : null}
       {children}
     </div>
   );
