@@ -499,4 +499,65 @@ describe("Playground regression guards", () => {
     expect(field.queryByRole("button", { name: "Add Item" })).toBeNull();
     expect(field.queryByRole("button", { name: "Remove" })).toBeNull();
   });
+
+  it("supports if/then/else schemas in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    await user.click((await builder.findAllByRole("button", { name: "Add if" }))[0]);
+    await user.click((await builder.findAllByRole("button", { name: "Add then" }))[0]);
+    await user.click((await builder.findAllByRole("button", { name: "Add else" }))[0]);
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"if"');
+    expect(previewText).toContain('"then"');
+    expect(previewText).toContain('"else"');
+  });
+
+  it("supports minLength and maxLength for string fields in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const minLengthInput = await property.findByRole("spinbutton", { name: "minLength" });
+    const maxLengthInput = await property.findByRole("spinbutton", { name: "maxLength" });
+
+    await user.clear(minLengthInput);
+    await user.type(minLengthInput, "3");
+    await user.clear(maxLengthInput);
+    await user.type(maxLengthInput, "12");
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"minLength": 3');
+    expect(previewText).toContain('"maxLength": 12');
+  });
 });

@@ -4,6 +4,7 @@ import type { JSONSchema, JSONSchemaType } from "../types/schema";
 import { createAjvForSchema } from "../utils/schemaValidation";
 
 type SchemaCombinationKey = "allOf" | "anyOf" | "oneOf";
+type SchemaConditionalKey = "if" | "then" | "else";
 
 const FIELD_TYPES: JSONSchemaType[] = ["string", "number", "integer", "boolean", "object", "array", "null"];
 
@@ -188,12 +189,32 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
         <EnumEditor schema={schema} schemaTypes={schemaTypes} primaryType={primaryType} onChange={onChange} />
 
         {hasType("string") ? (
-          <TextInput
-            label="Pattern"
-            value={stringOrEmpty(schema.pattern)}
-            onChange={(value) => onChange(assignOptionalString(schema, "pattern", value))}
-            placeholder="e.g. ^[A-Za-z]+$"
-          />
+          <>
+            <div className="raf-builder-grid">
+              <TextInput
+                label="minLength"
+                value={numberOrEmpty(schema.minLength)}
+                onChange={(value) => onChange(assignOptionalInteger(schema, "minLength", value))}
+                type="number"
+                step="1"
+                placeholder="e.g. 1"
+              />
+              <TextInput
+                label="maxLength"
+                value={numberOrEmpty(schema.maxLength)}
+                onChange={(value) => onChange(assignOptionalInteger(schema, "maxLength", value))}
+                type="number"
+                step="1"
+                placeholder="e.g. 255"
+              />
+            </div>
+            <TextInput
+              label="Pattern"
+              value={stringOrEmpty(schema.pattern)}
+              onChange={(value) => onChange(assignOptionalString(schema, "pattern", value))}
+              placeholder="e.g. ^[A-Za-z]+$"
+            />
+          </>
         ) : null}
 
         {hasType("number") || hasType("integer") ? (
@@ -228,6 +249,9 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
         <CombinationEditor kind="allOf" schema={schema} onChange={onChange} />
         <CombinationEditor kind="anyOf" schema={schema} onChange={onChange} />
         <CombinationEditor kind="oneOf" schema={schema} onChange={onChange} />
+        <ConditionalSchemaEditor kind="if" schema={schema} onChange={onChange} />
+        <ConditionalSchemaEditor kind="then" schema={schema} onChange={onChange} />
+        <ConditionalSchemaEditor kind="else" schema={schema} onChange={onChange} />
 
         {!isRoot && onRemove ? (
           <div className="raf-button-row">
@@ -665,6 +689,69 @@ function CombinationEditor({
           }}
         />
       ))}
+    </div>
+  );
+}
+
+function ConditionalSchemaEditor({
+  kind,
+  schema,
+  onChange
+}: {
+  kind: SchemaConditionalKey;
+  schema: JSONSchema;
+  onChange: (next: JSONSchema) => void;
+}) {
+  const entry = isObject(schema[kind]) ? (schema[kind] as JSONSchema) : undefined;
+
+  return (
+    <div className="raf-builder-block">
+      <h4 className="raf-builder-heading">{kind}</h4>
+
+      <div className="raf-button-row">
+        {!entry ? (
+          <button
+            className="raf-button raf-button-primary"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              next[kind] = { type: "string" };
+              onChange(next);
+            }}
+          >
+            Add {kind}
+          </button>
+        ) : (
+          <button
+            className="raf-button raf-button-secondary"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              delete next[kind];
+              onChange(next);
+            }}
+          >
+            Clear {kind}
+          </button>
+        )}
+      </div>
+
+      {entry ? (
+        <SchemaNodeEditor
+          label={kind}
+          schema={entry}
+          onChange={(nextEntrySchema) => {
+            const next = cloneSchema(schema);
+            next[kind] = nextEntrySchema;
+            onChange(next);
+          }}
+          onRemove={() => {
+            const next = cloneSchema(schema);
+            delete next[kind];
+            onChange(next);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1607,6 +1694,12 @@ function sanitizeSchemaForOutput(schema: JSONSchema): JSONSchema {
     next.contains = sanitizeSchemaForOutput(next.contains as JSONSchema);
   }
 
+  for (const key of ["if", "then", "else"] as const) {
+    if (isObject(next[key])) {
+      next[key] = sanitizeSchemaForOutput(next[key] as JSONSchema);
+    }
+  }
+
   for (const key of ["allOf", "anyOf", "oneOf"] as const) {
     if (Array.isArray(next[key])) {
       next[key] = next[key].map((entry) => sanitizeSchemaForOutput(entry));
@@ -1776,6 +1869,12 @@ function validateConstAndEnumConsistency(schema: JSONSchema, schemaPointer = "")
 
   if (isObject(schema.contains)) {
     errors.push(...validateConstAndEnumConsistency(schema.contains as JSONSchema, `${schemaPointer}/contains`));
+  }
+
+  for (const key of ["if", "then", "else"] as const) {
+    if (isObject(schema[key])) {
+      errors.push(...validateConstAndEnumConsistency(schema[key] as JSONSchema, `${schemaPointer}/${key}`));
+    }
   }
 
   for (const combinatorKey of ["allOf", "anyOf", "oneOf"] as const) {
