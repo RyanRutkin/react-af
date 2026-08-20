@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SchemaBuilderProps, SchemaBuilderValidationError } from "../types/components";
 import type { JSONSchema, JSONSchemaType } from "../types/schema";
-import { createAjvForSchema } from "../utils/schemaValidation";
+import { AJV_SUPPORTED_FORMATS, createAjvForSchema } from "../utils/schemaValidation";
 
 type SchemaCombinationKey = "allOf" | "anyOf" | "oneOf";
 type SchemaConditionalKey = "if" | "then" | "else";
@@ -213,6 +213,13 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
               value={stringOrEmpty(schema.pattern)}
               onChange={(value) => onChange(assignOptionalString(schema, "pattern", value))}
               placeholder="e.g. ^[A-Za-z]+$"
+            />
+            <TypeaheadInput
+              label="format"
+              value={stringOrEmpty(schema.format)}
+              onChange={(value) => onChange(assignOptionalString(schema, "format", value))}
+              options={AJV_SUPPORTED_FORMATS}
+              placeholder="e.g. email"
             />
           </>
         ) : null}
@@ -860,6 +867,82 @@ function TextInput({
         onChange={(event) => onChange(event.target.value)}
       />
       {helperText ? <div className="raf-muted">{helperText}</div> : null}
+    </label>
+  );
+}
+
+function TypeaheadInput({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  placeholder?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLLabelElement | null>(null);
+  const normalizedValue = value.trim().toLowerCase();
+  const filteredOptions = options.filter((option) =>
+    normalizedValue === "" ? true : option.toLowerCase().startsWith(normalizedValue)
+  );
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isOpen]);
+
+  return (
+    <label className="raf-field raf-typeahead" ref={containerRef}>
+      <div className="raf-field-label-row">
+        <span className="raf-field-label">{label}</span>
+      </div>
+      <input
+        className="raf-input raf-builder-control"
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        onFocus={() => setIsOpen(true)}
+        onClick={() => setIsOpen(true)}
+        onChange={(event) => {
+          setIsOpen(true);
+          onChange(event.target.value);
+        }}
+      />
+      {isOpen && filteredOptions.length > 0 ? (
+        <div className="raf-typeahead-menu" role="listbox" aria-label={`${label} options`}>
+          {filteredOptions.map((option) => (
+            <button
+              key={option}
+              className="raf-typeahead-option"
+              type="button"
+              role="option"
+              aria-selected={value === option}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onChange(option);
+                setIsOpen(false);
+              }}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </label>
   );
 }

@@ -3,6 +3,26 @@ import Ajv2019 from "ajv/dist/2019";
 import Ajv2020 from "ajv/dist/2020";
 import type { JSONSchema, PeerSchemasInput } from "../types/schema";
 
+export const AJV_SUPPORTED_FORMATS = [
+  "date",
+  "time",
+  "date-time",
+  "duration",
+  "uri",
+  "uri-reference",
+  "uri-template",
+  "url",
+  "email",
+  "hostname",
+  "ipv4",
+  "ipv6",
+  "regex",
+  "uuid",
+  "json-pointer",
+  "json-pointer-uri-fragment",
+  "relative-json-pointer"
+] as const;
+
 const AJV_OPTIONS = {
   allErrors: true,
   strict: false,

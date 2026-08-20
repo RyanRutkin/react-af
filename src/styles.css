@@ -13,6 +13,7 @@
 }
 
 .raf-field {
+  display: block;
   margin-bottom: 14px;
 }
 
@@ -191,6 +192,14 @@
   font-family: "Segoe UI", "Helvetica Neue", Helvetica, sans-serif;
 }
 
+.raf-schema-builder .raf-object {
+  overflow: visible;
+}
+
+.raf-schema-builder .raf-object-content {
+  overflow: visible;
+}
+
 .raf-builder-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -258,6 +267,48 @@
   border-color: var(--raf-color-border-focus);
   outline: none;
   box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.15);
+}
+
+.raf-typeahead {
+  position: relative;
+  z-index: 30;
+}
+
+.raf-typeahead-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #98a2b3;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 14px 28px rgba(16, 24, 40, 0.18), 0 4px 10px rgba(16, 24, 40, 0.1);
+}
+
+.raf-typeahead-option {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #1d2939;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.raf-typeahead-option:hover,
+.raf-typeahead-option[aria-selected="true"] {
+  background: #eef4ff;
+  color: #1849a9;
 }
 
 .raf-error {
