@@ -46,6 +46,7 @@ export interface SchemaFormOptions {
 export interface SchemaFormProps {
   schema: JSONSchema;
   peerSchemas?: PeerSchemasInput;
+  getSchema?: (requestedSchema: string) => Promise<JSONSchema>;
   widgets?: SchemaFormWidgets;
   options?: SchemaFormOptions;
   data?: OutputData;

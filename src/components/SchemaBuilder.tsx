@@ -116,7 +116,7 @@ const FIELD_HELP_BASE_CONTENT: Record<string, Pick<KeywordHelpDefinition, "summa
       "<strong>maxLength</strong> requires string instances to be no longer than this value. It applies only when the instance <strong>type</strong> is string."
   },
   pattern: {
-    summary: "Requires strings to match a regular expression.",
+    summary: "Requires strings to match a regular expression. (HINT: Don't provide the leading or trailing slashes.)",
     details:
       "<strong>pattern</strong> uses an ECMA-262 compatible regular expression. A string is valid when the regex finds a match within the instance text."
   },
@@ -3421,7 +3421,11 @@ function sanitizeSchemaForOutput(schema: JSONSchema): JSONSchema {
       sanitizedProperties[propertyName] = sanitizeSchemaForOutput(propertySchema);
     }
 
-    next.properties = sanitizedProperties;
+    if (Object.keys(sanitizedProperties).length > 0) {
+      next.properties = sanitizedProperties;
+    } else {
+      delete next.properties;
+    }
   }
 
   if (next.patternProperties) {
@@ -3481,6 +3485,10 @@ function sanitizeSchemaForOutput(schema: JSONSchema): JSONSchema {
 
   if (Array.isArray(next.required)) {
     next.required = next.required.filter((entry) => entry.trim() !== "");
+
+    if (next.required.length === 0) {
+      delete next.required;
+    }
   }
 
   if (Array.isArray(next.items)) {

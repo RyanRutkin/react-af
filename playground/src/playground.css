@@ -189,7 +189,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .play-builder-sidebar-header {
@@ -204,18 +204,16 @@ body {
 
 .play-builder-sidebar-panels {
   position: relative;
-  min-height: 32.5rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .play-builder-sidecard {
-  position: absolute;
-  inset: 0;
-  width: 100%;
+  position: static;
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
-  transition: transform 220ms ease, opacity 220ms ease, visibility 220ms ease;
-  will-change: transform, opacity;
 }
 
 .play-builder-sidebar-panels-forward .play-builder-sidecard-result,
@@ -229,17 +227,48 @@ body {
 }
 
 .play-builder-sidecard-active {
-  opacity: 1;
-  visibility: visible;
-  transform: scaleX(1);
-  pointer-events: auto;
+  display: flex;
 }
 
 .play-builder-sidecard-hidden {
-  opacity: 0;
-  visibility: hidden;
-  transform: scaleX(0);
-  pointer-events: none;
+  display: none;
+}
+
+.play-modal-layer {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.36);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  z-index: 2000;
+}
+
+.play-modal-card {
+  width: min(52rem, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 0.0625rem solid #d0d5dd;
+  border-radius: 0.875rem;
+  box-shadow: 0 1.25rem 2.25rem rgba(15, 23, 42, 0.22);
+  padding: 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.play-modal-textarea {
+  min-height: 18rem;
+}
+
+.play-schema-request-waiting {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.play-schema-request-waiting .play-error {
+  margin-top: 0;
 }
 
 @media (min-width: 60rem) {
@@ -269,9 +298,10 @@ body {
 
   .play-builder-sidebar {
     grid-column: span 6;
-    position: sticky;
-    top: 0.75rem;
+    position: static;
     align-self: start;
+    max-height: calc(100vh - 0.75rem);
+    overflow: hidden;
   }
 }
 
@@ -280,7 +310,12 @@ body {
     position: static;
   }
 
-  .play-builder-sidebar-panels {
-    min-height: 28.75rem;
+  .play-modal-card {
+    max-height: 92vh;
+    padding: 1rem;
+  }
+
+  .play-modal-textarea {
+    min-height: 14rem;
   }
 }

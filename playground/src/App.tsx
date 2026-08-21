@@ -1,4 +1,4 @@
-import { Component, type ReactNode, useMemo, useState } from "react";
+import { Component, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import {
   SchemaBuilder,
   SchemaBuilderHelper,
@@ -10,6 +10,25 @@ import {
 } from "@ryanrutkin/react-af";
 import { initialProfileData, peerSchemasArray, profileSchema } from "./examples/schemas";
 import "./playground.css";
+
+type SchemaRequestState = {
+  requestId: number;
+  requestedSchema: string;
+  input: string;
+  error: string | null;
+  source: "form" | "builder";
+  resolve: (schema: JSONSchema) => void;
+  reject: (reason?: unknown) => void;
+};
+
+type PendingBuilderSchemaRequest = {
+  requestId: number;
+  requestedSchema: string;
+  listeners: Array<{
+    resolve: (schema: JSONSchema) => void;
+    reject: (reason?: unknown) => void;
+  }>;
+};
 
 class FormErrorBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
   constructor(props: { children: ReactNode }) {
@@ -51,6 +70,9 @@ export default function App() {
   const [builderValidationErrors, setBuilderValidationErrors] = useState<SchemaBuilderValidationError[]>([]);
   const [schemaInput, setSchemaInput] = useState(() => JSON.stringify(profileSchema, null, 2));
   const [dataInput, setDataInput] = useState(() => JSON.stringify(initialProfileData, null, 2));
+  const [schemaRequestState, setSchemaRequestState] = useState<SchemaRequestState | null>(null);
+  const [pendingBuilderSchemaRequests, setPendingBuilderSchemaRequests] = useState<PendingBuilderSchemaRequest[]>([]);
+  const schemaRequestIdRef = useRef(0);
 
   const parsedSchema = useMemo(() => parseJson<JSONSchema>(schemaInput), [schemaInput]);
   const parsedData = useMemo(() => {
@@ -84,6 +106,163 @@ export default function App() {
     setBuilderSidebarDirection(order[nextView] > order[builderSidebarView] ? "forward" : "backward");
     setBuilderSidebarView(nextView);
   };
+
+  const nextSchemaRequestId = () => {
+    schemaRequestIdRef.current += 1;
+    return schemaRequestIdRef.current;
+  };
+
+  const removePendingBuilderRequest = useCallback((requestId: number) => {
+    setPendingBuilderSchemaRequests((previous) => previous.filter((request) => request.requestId !== requestId));
+  }, []);
+
+  const handleSchemaRequestCancel = useCallback(() => {
+    if (!schemaRequestState) {
+      return;
+    }
+
+    schemaRequestState.reject(new Error(`Schema request canceled for: ${schemaRequestState.requestedSchema}`));
+    if (schemaRequestState.source === "builder") {
+      removePendingBuilderRequest(schemaRequestState.requestId);
+    }
+    setSchemaRequestState(null);
+  }, [removePendingBuilderRequest, schemaRequestState]);
+
+  const handleSchemaRequestSave = useCallback(() => {
+    if (!schemaRequestState) {
+      return;
+    }
+
+    const rawInput = schemaRequestState.input.trim();
+    if (!rawInput) {
+      setSchemaRequestState((previous) =>
+        previous
+          ? {
+              ...previous,
+              error: "Schema JSON is required before saving."
+            }
+          : previous
+      );
+      return;
+    }
+
+    const parsedSchema = parseJson<JSONSchema>(rawInput);
+    if (!parsedSchema.valid) {
+      setSchemaRequestState((previous) =>
+        previous
+          ? {
+              ...previous,
+              error: `Invalid JSON: ${parsedSchema.error}`
+            }
+          : previous
+      );
+      return;
+    }
+
+    try {
+      ensureValidJsonSchema(parsedSchema.value);
+    } catch (error) {
+      setSchemaRequestState((previous) =>
+        previous
+          ? {
+              ...previous,
+              error: error instanceof Error ? error.message : "Invalid JSON Schema."
+            }
+          : previous
+      );
+      return;
+    }
+
+    schemaRequestState.resolve(parsedSchema.value);
+    if (schemaRequestState.source === "builder") {
+      removePendingBuilderRequest(schemaRequestState.requestId);
+    }
+    setSchemaRequestState(null);
+  }, [removePendingBuilderRequest, schemaRequestState]);
+
+  const getSchema = useCallback((requestedSchema: string) => {
+    const requestId = nextSchemaRequestId();
+
+    return new Promise<JSONSchema>((resolve, reject) => {
+      setSchemaRequestState((previous) => {
+        if (previous) {
+          previous.reject(new Error(`Schema request interrupted by a new request for: ${requestedSchema}`));
+          if (previous.source === "builder") {
+            removePendingBuilderRequest(previous.requestId);
+          }
+        }
+
+        return {
+          requestId,
+          requestedSchema,
+          input: "",
+          error: null,
+          source: "form",
+          resolve,
+          reject
+        };
+      });
+    });
+  }, [removePendingBuilderRequest]);
+
+  const getBuilderSchema = useCallback((requestedSchema: string) => {
+    return new Promise<JSONSchema>((resolve, reject) => {
+      setPendingBuilderSchemaRequests((previous) => {
+        const existingIndex = previous.findIndex((request) => request.requestedSchema === requestedSchema);
+        if (existingIndex >= 0) {
+          const next = [...previous];
+          const existing = next[existingIndex];
+          next[existingIndex] = {
+            ...existing,
+            listeners: [...existing.listeners, { resolve, reject }]
+          };
+          return next;
+        }
+
+        return [
+          ...previous,
+          {
+            requestId: nextSchemaRequestId(),
+            requestedSchema,
+            listeners: [{ resolve, reject }]
+          }
+        ];
+      });
+    });
+  }, []);
+
+  const openPendingBuilderSchemaModal = useCallback(() => {
+    if (schemaRequestState) {
+      return;
+    }
+
+    setPendingBuilderSchemaRequests((previous) => {
+      const nextRequest = previous[0];
+      if (!nextRequest) {
+        return previous;
+      }
+
+      setSchemaRequestState({
+        requestId: nextRequest.requestId,
+        requestedSchema: nextRequest.requestedSchema,
+        input: "",
+        error: null,
+        source: "builder",
+        resolve: (schema: JSONSchema) => {
+          for (const listener of nextRequest.listeners) {
+            listener.resolve(schema);
+          }
+        },
+        reject: (reason?: unknown) => {
+          for (const listener of nextRequest.listeners) {
+            listener.reject(reason);
+          }
+        }
+      });
+
+      return previous;
+    });
+  }, [schemaRequestState]);
 
   return (
     <div className="play-root">
@@ -147,6 +326,7 @@ export default function App() {
                   <SchemaForm
                     schema={parsedSchema.value}
                     peerSchemas={peerSchemasArray}
+                    getSchema={getSchema}
                     data={activeData}
                     onChange={(
                       nextData: OutputData,
@@ -227,6 +407,7 @@ export default function App() {
                     <FormErrorBoundary>
                       <SchemaForm
                         schema={builderSchema}
+                        getSchema={getBuilderSchema}
                         data={builderPreviewData}
                         onChange={(nextData: OutputData, validationErrors: SchemaFormValidationError[]) => {
                           setBuilderPreviewErrors(validationErrors);
@@ -237,6 +418,15 @@ export default function App() {
                   ) : (
                     <div className="play-error">No schema changes yet.</div>
                   )}
+
+                  {pendingBuilderSchemaRequests.length > 0 ? (
+                    <div className="play-schema-request-waiting">
+                      <div className="play-error">The SchemaForm is waiting on one or more peer schemas</div>
+                      <button type="button" className="play-toggle-button" onClick={openPendingBuilderSchemaModal}>
+                        Add required peer schemas
+                      </button>
+                    </div>
+                  ) : null}
 
                   <ValidationErrorList title="Result Form Validation Errors" errors={builderPreviewErrors} />
                 </section>
@@ -261,6 +451,56 @@ export default function App() {
           </>
         )}
       </main>
+
+      {schemaRequestState ? (
+        <div className="play-modal-layer" role="dialog" aria-modal="true" aria-labelledby="schema-request-title">
+          <div className="play-modal-card">
+            <h2 id="schema-request-title">Referenced Schema Required</h2>
+            <p className="play-note">
+              SchemaForm requested a referenced schema that is not present in peerSchemas.
+            </p>
+            <p className="play-event">
+              Required schema reference: <strong>{schemaRequestState.requestedSchema}</strong>
+            </p>
+            <label className="play-input-label" htmlFor="schema-request-input">
+              Paste JSON Schema
+            </label>
+            <textarea
+              id="schema-request-input"
+              className="play-textarea play-modal-textarea"
+              value={schemaRequestState.input}
+              onChange={(event) => {
+                const nextInput = event.target.value;
+                const nextTrimmedInput = nextInput.trim();
+                const nextError = validateSchemaRequestInput(nextTrimmedInput);
+                setSchemaRequestState((previous) =>
+                  previous
+                    ? {
+                        ...previous,
+                        input: nextInput,
+                        error: nextError
+                      }
+                    : previous
+                );
+              }}
+            />
+            {schemaRequestState.error ? <div className="play-error">{schemaRequestState.error}</div> : null}
+            <div className="play-toggle-row">
+              <button
+                type="button"
+                className="play-toggle-button play-toggle-button-active"
+                disabled={schemaRequestState.input.trim().length === 0 || schemaRequestState.error !== null}
+                onClick={handleSchemaRequestSave}
+              >
+                Use This Schema
+              </button>
+              <button type="button" className="play-toggle-button" onClick={handleSchemaRequestCancel}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -291,4 +531,43 @@ function ValidationErrorList({ title, errors }: { title: string; errors: Array<{
       )}
     </div>
   );
+}
+
+function ensureValidJsonSchema(candidate: JSONSchema): void {
+  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
+    throw new Error("Schema must be a JSON object.");
+  }
+
+  const hasShapeKeyword =
+    candidate.type !== undefined ||
+    candidate.$ref !== undefined ||
+    candidate.properties !== undefined ||
+    candidate.items !== undefined ||
+    candidate.anyOf !== undefined ||
+    candidate.oneOf !== undefined ||
+    candidate.allOf !== undefined ||
+    candidate.$defs !== undefined ||
+    candidate.definitions !== undefined;
+
+  if (!hasShapeKeyword) {
+    throw new Error("Schema must include a JSON Schema keyword such as type, properties, items, or $ref.");
+  }
+}
+
+function validateSchemaRequestInput(input: string): string | null {
+  if (!input) {
+    return null;
+  }
+
+  const parsedSchema = parseJson<JSONSchema>(input);
+  if (!parsedSchema.valid) {
+    return `Invalid JSON: ${parsedSchema.error}`;
+  }
+
+  try {
+    ensureValidJsonSchema(parsedSchema.value);
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : "Invalid JSON Schema.";
+  }
 }

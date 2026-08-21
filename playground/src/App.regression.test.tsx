@@ -382,6 +382,335 @@ describe("Playground regression guards", () => {
     expect(await screen.findByText(/"choice": 1/)).not.toBeNull();
   });
 
+  it("prompts for missing referenced schema and blocks save on invalid input", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const schemaInput = await screen.findByLabelText("Schema Input (JSON)");
+    const dataInput = await screen.findByLabelText("Data Input (JSON)");
+
+    const missingRefSchema = {
+      type: "object",
+      properties: {
+        item: {
+          $ref: "https://example.com/schemas/missing#/definitions/item"
+        }
+      }
+    };
+
+    fireEvent.change(schemaInput, {
+      target: { value: JSON.stringify(missingRefSchema, null, 2) }
+    });
+
+    fireEvent.change(dataInput, {
+      target: { value: JSON.stringify({ item: { id: "x" } }, null, 2) }
+    });
+
+    expect(await screen.findByRole("heading", { name: "Referenced Schema Required" })).not.toBeNull();
+    expect(await screen.findByText("https://example.com/schemas/missing#/definitions/item")).not.toBeNull();
+
+    const useSchemaButton = await screen.findByRole("button", { name: "Use This Schema" });
+    expect((useSchemaButton as HTMLButtonElement).disabled).toBe(true);
+
+    const schemaPasteInput = (await screen.findByLabelText("Paste JSON Schema")) as HTMLTextAreaElement;
+    fireEvent.change(schemaPasteInput, { target: { value: "{not-json" } });
+    expect((useSchemaButton as HTMLButtonElement).disabled).toBe(true);
+    expect(await screen.findByText(/Invalid JSON:/)).not.toBeNull();
+
+    fireEvent.change(schemaPasteInput, {
+      target: {
+        value: JSON.stringify(
+          {
+            $id: "https://example.com/schemas/missing",
+            type: "object",
+            definitions: {
+              item: {
+                type: "object",
+                properties: {
+                  id: { type: "string" }
+                },
+                required: ["id"]
+              }
+            }
+          },
+          null,
+          2
+        )
+      }
+    });
+
+    expect((useSchemaButton as HTMLButtonElement).disabled).toBe(false);
+
+    await user.click(await screen.findByRole("button", { name: "Use This Schema" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "Referenced Schema Required" })).toBeNull();
+    });
+
+    expect(await screen.findByText("item")).not.toBeNull();
+  });
+
+  it("rejects missing referenced schema request when modal is canceled", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const schemaInput = await screen.findByLabelText("Schema Input (JSON)");
+
+    const missingRefSchema = {
+      type: "object",
+      properties: {
+        item: {
+          $ref: "https://example.com/schemas/cancel-me#/definitions/item"
+        }
+      }
+    };
+
+    fireEvent.change(schemaInput, {
+      target: { value: JSON.stringify(missingRefSchema, null, 2) }
+    });
+
+    expect(await screen.findByRole("heading", { name: "Referenced Schema Required" })).not.toBeNull();
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "Referenced Schema Required" })).toBeNull();
+    });
+
+    expect(await screen.findByText(/Failed to load referenced schema for:/)).not.toBeNull();
+  });
+
+  it("queues builder-side missing schema requests until Add required peer schemas is clicked", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const advancedToggle = await builder.findByText("Advanced: Edit Full Schema JSON");
+    await user.click(advancedToggle);
+
+    const missingRefSchema = {
+      type: "object",
+      properties: {
+        item: {
+          $ref: "https://example.com/schemas/deferred#/definitions/item"
+        }
+      }
+    };
+
+    const jsonEditor = (builderSection as HTMLElement).querySelector("textarea.raf-textarea:not(.raf-builder-control)");
+    expect(jsonEditor).not.toBeNull();
+    fireEvent.change(jsonEditor as HTMLTextAreaElement, {
+      target: { value: JSON.stringify(missingRefSchema, null, 2) }
+    });
+
+    const sidePanelToggleRow = await screen.findByLabelText("SchemaBuilder side panel view");
+    await user.click(within(sidePanelToggleRow).getByRole("button", { name: "Form" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "Referenced Schema Required" })).toBeNull();
+    });
+
+    expect(await screen.findByText("The SchemaForm is waiting on one or more peer schemas")).not.toBeNull();
+
+    await user.click(await screen.findByRole("button", { name: "Add required peer schemas" }));
+    expect(await screen.findByRole("heading", { name: "Referenced Schema Required" })).not.toBeNull();
+
+    const schemaPasteInput = (await screen.findByLabelText("Paste JSON Schema")) as HTMLTextAreaElement;
+    fireEvent.change(schemaPasteInput, {
+      target: {
+        value: JSON.stringify(
+          {
+            $id: "https://example.com/schemas/deferred",
+            type: "object",
+            definitions: {
+              item: {
+                type: "object",
+                properties: {
+                  id: { type: "string" }
+                },
+                required: ["id"]
+              }
+            }
+          },
+          null,
+          2
+        )
+      }
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Use This Schema" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("The SchemaForm is waiting on one or more peer schemas")).toBeNull();
+    });
+  });
+
+  it("coalesces repeated builder missing-schema requests while waiting and clears after one upload", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const advancedToggle = await builder.findByText("Advanced: Edit Full Schema JSON");
+    await user.click(advancedToggle);
+
+    const baseSchema = {
+      type: "object",
+      properties: {
+        item: {
+          $ref: "https://example.com/schemas/reload#/definitions/item"
+        }
+      }
+    };
+
+    const jsonEditor = (builderSection as HTMLElement).querySelector("textarea.raf-textarea:not(.raf-builder-control)");
+    expect(jsonEditor).not.toBeNull();
+    fireEvent.change(jsonEditor as HTMLTextAreaElement, {
+      target: { value: JSON.stringify(baseSchema, null, 2) }
+    });
+
+    const sidePanelToggleRow = await screen.findByLabelText("SchemaBuilder side panel view");
+    await user.click(within(sidePanelToggleRow).getByRole("button", { name: "Form" }));
+
+    expect(await screen.findByText("The SchemaForm is waiting on one or more peer schemas")).not.toBeNull();
+
+    const changedSchema = {
+      type: "object",
+      properties: {
+        item: {
+          $ref: "https://example.com/schemas/reload#/definitions/item"
+        },
+        status: {
+          type: "string"
+        }
+      }
+    };
+
+    fireEvent.change(jsonEditor as HTMLTextAreaElement, {
+      target: { value: JSON.stringify(changedSchema, null, 2) }
+    });
+
+    expect(await screen.findByText("The SchemaForm is waiting on one or more peer schemas")).not.toBeNull();
+
+    await user.click(await screen.findByRole("button", { name: "Add required peer schemas" }));
+    expect(await screen.findByRole("heading", { name: "Referenced Schema Required" })).not.toBeNull();
+
+    const schemaPasteInput = (await screen.findByLabelText("Paste JSON Schema")) as HTMLTextAreaElement;
+    fireEvent.change(schemaPasteInput, {
+      target: {
+        value: JSON.stringify(
+          {
+            $id: "https://example.com/schemas/reload",
+            type: "object",
+            definitions: {
+              item: {
+                type: "object",
+                properties: {
+                  id: { type: "string" }
+                },
+                required: ["id"]
+              }
+            }
+          },
+          null,
+          2
+        )
+      }
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Use This Schema" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("The SchemaForm is waiting on one or more peer schemas")).toBeNull();
+    });
+
+    expect(screen.queryByText(/Failed to load referenced schema for:/)).toBeNull();
+  });
+
+  it("resolves whole-document external refs from builder modal without duplicate schema errors", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const advancedToggle = await builder.findByText("Advanced: Edit Full Schema JSON");
+    await user.click(advancedToggle);
+
+    const missingRefSchema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      title: "all",
+      type: "object",
+      properties: {
+        one: {
+          type: "object",
+          properties: {
+            color: {
+              type: "string",
+              $ref: "https://ryanrutkin.github.io/react-af/playground/example/color"
+            }
+          }
+        }
+      },
+      $id: "https://ryanrutkin.github.io/react-af/playground/example/all"
+    };
+
+    const jsonEditor = (builderSection as HTMLElement).querySelector("textarea.raf-textarea:not(.raf-builder-control)");
+    expect(jsonEditor).not.toBeNull();
+    fireEvent.change(jsonEditor as HTMLTextAreaElement, {
+      target: { value: JSON.stringify(missingRefSchema, null, 2) }
+    });
+
+    const sidePanelToggleRow = await screen.findByLabelText("SchemaBuilder side panel view");
+    await user.click(within(sidePanelToggleRow).getByRole("button", { name: "Form" }));
+
+    expect(await screen.findByText("The SchemaForm is waiting on one or more peer schemas")).not.toBeNull();
+
+    await user.click(await screen.findByRole("button", { name: "Add required peer schemas" }));
+    expect(await screen.findByRole("heading", { name: "Referenced Schema Required" })).not.toBeNull();
+
+    const schemaPasteInput = (await screen.findByLabelText("Paste JSON Schema")) as HTMLTextAreaElement;
+    fireEvent.change(schemaPasteInput, {
+      target: {
+        value: JSON.stringify(
+          {
+            $schema: "https://json-schema.org/draft/2020-12/schema",
+            title: "Color",
+            type: "string",
+            pattern: "^#?([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$",
+            required: [],
+            $id: "https://ryanrutkin.github.io/react-af/playground/example/color"
+          },
+          null,
+          2
+        )
+      }
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Use This Schema" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "Referenced Schema Required" })).toBeNull();
+    });
+
+    expect(screen.queryByText(/resolves to more than one schema/i)).toBeNull();
+    expect(screen.queryByText(/Failed to load referenced schema for:/)).toBeNull();
+  });
+
   it("hides the SchemaForm Add Item button when maxItems is reached", async () => {
     render(<App />);
 
@@ -818,6 +1147,43 @@ describe("Playground regression guards", () => {
 
     expect(previewText).toContain('"minProperties": 1');
     expect(previewText).toContain('"maxProperties": 3');
+  });
+
+  it("omits empty properties and required for object fields in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "object");
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+
+    const previewSchema = JSON.parse(preview?.textContent ?? "{}") as {
+      properties?: Record<string, { properties?: Record<string, unknown>; required?: string[] }>;
+    };
+
+    const fieldSchema = previewSchema.properties?.field;
+    expect(fieldSchema).toBeDefined();
+    expect(Object.prototype.hasOwnProperty.call(fieldSchema ?? {}, "properties")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(fieldSchema ?? {}, "required")).toBe(false);
   });
 
   it("reports schema validation error when minProperties exceeds maxProperties", async () => {

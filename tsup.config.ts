@@ -13,7 +13,9 @@ export default defineConfig({
     "ajv/dist/2019",
     "ajv/dist/2020",
     "json-pointer-relational",
-    "html-react-parser"
+    "html-react-parser",
+    "@hyperjump/json-schema/bundle",
+    "@hyperjump/json-schema/draft-2020-12"
   ],
   loader: {
     ".css": "copy"
