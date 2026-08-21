@@ -981,23 +981,6 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
 
       <div className="raf-builder-block">
         <FieldLabel label="dependentRequired" keyword="dependentRequired" labelType="heading" />
-        <div className="raf-button-row">
-          <button
-            className="raf-button raf-button-secondary"
-            type="button"
-            onClick={() => {
-              const next = cloneSchema(schema);
-              const nextEntries = { ...(next.dependentRequired ?? {}) };
-              const newKey = createUniqueEntryName(nextEntries, "field");
-              nextEntries[newKey] = [];
-              next.dependentRequired = nextEntries;
-              onChange(next);
-            }}
-          >
-            Add dependentRequired Entry
-          </button>
-        </div>
-
         {Object.entries(dependentRequired).map(([propertyName, dependencies], index) => {
           const serializedDependencies = Array.isArray(dependencies) ? dependencies.join(", ") : "";
 
@@ -1066,6 +1049,23 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
             </div>
           );
         })}
+
+        <div className="raf-button-row">
+          <button
+            className="raf-button raf-button-secondary"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              const nextEntries = { ...(next.dependentRequired ?? {}) };
+              const newKey = createUniqueEntryName(nextEntries, "field");
+              nextEntries[newKey] = [];
+              next.dependentRequired = nextEntries;
+              onChange(next);
+            }}
+          >
+            Add dependentRequired Entry
+          </button>
+        </div>
       </div>
 
       <SchemaMapEditor
@@ -1093,22 +1093,6 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
           onChange(next);
         }}
       />
-
-      <div className="raf-button-row">
-        <button
-          className="raf-button raf-button-primary"
-          type="button"
-          onClick={() => {
-            const next = cloneSchema(schema);
-            next.properties = { ...(next.properties ?? {}) };
-            const newKey = createUniquePropertyName(next.properties, "field");
-            next.properties[newKey] = { type: "string", title: newKey };
-            onChange(next);
-          }}
-        >
-          Add Property
-        </button>
-      </div>
 
       {Object.entries(properties).map(([propertyName, propertySchema], index) => (
         <div className="raf-builder-property" key={index}>
@@ -1196,6 +1180,22 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
           />
         </div>
       ))}
+
+      <div className="raf-button-row">
+        <button
+          className="raf-button raf-button-primary"
+          type="button"
+          onClick={() => {
+            const next = cloneSchema(schema);
+            next.properties = { ...(next.properties ?? {}) };
+            const newKey = createUniquePropertyName(next.properties, "field");
+            next.properties[newKey] = { type: "string" };
+            onChange(next);
+          }}
+        >
+          Add Property
+        </button>
+      </div>
     </div>
   );
 }
@@ -1218,27 +1218,6 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
         <>
           <h4 className="raf-builder-heading">Array Items (Tuple)</h4>
           <FieldLabel label="prefixItems" keyword="prefixItems" />
-          <div className="raf-button-row">
-            <button
-              className="raf-button raf-button-primary"
-              type="button"
-              onClick={() => {
-                const next = cloneSchema(schema);
-                const nextItems = Array.isArray(next.prefixItems)
-                  ? [...next.prefixItems]
-                  : Array.isArray(next.items)
-                    ? [...next.items]
-                    : [];
-                nextItems.push({ type: "string" });
-                next.prefixItems = nextItems;
-                next.items = false;
-                onChange(next);
-              }}
-            >
-              Add Tuple Item Schema
-            </button>
-          </div>
-
           {tupleItems.map((itemSchema, index) => (
             <SchemaNodeEditor
               key={`tuple-item-${index}`}
@@ -1270,6 +1249,27 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
               }}
             />
           ))}
+
+          <div className="raf-button-row">
+            <button
+              className="raf-button raf-button-primary"
+              type="button"
+              onClick={() => {
+                const next = cloneSchema(schema);
+                const nextItems = Array.isArray(next.prefixItems)
+                  ? [...next.prefixItems]
+                  : Array.isArray(next.items)
+                    ? [...next.items]
+                    : [];
+                nextItems.push({ type: "string" });
+                next.prefixItems = nextItems;
+                next.items = false;
+                onChange(next);
+              }}
+            >
+              Add Tuple Item Schema
+            </button>
+          </div>
 
           <div className="raf-button-row">
             <button
@@ -1485,19 +1485,6 @@ function CombinationEditor({
       <FieldLabel label={kind} keyword={kind} labelType="heading" />
 
       <div className="raf-button-row">
-        <button
-          className="raf-button raf-button-primary"
-          type="button"
-          onClick={() => {
-            const next = cloneSchema(schema);
-            const currentEntries = (Array.isArray(next[kind]) ? next[kind] : []) as JSONSchema[];
-            next[kind] = [...currentEntries, { type: "string" }];
-            onChange(next);
-          }}
-        >
-          Add {kind} Entry
-        </button>
-
         {entries.length > 0 ? (
           <button
             className="raf-button raf-button-secondary"
@@ -1534,6 +1521,21 @@ function CombinationEditor({
           }}
         />
       ))}
+
+      <div className="raf-button-row">
+        <button
+          className="raf-button raf-button-primary"
+          type="button"
+          onClick={() => {
+            const next = cloneSchema(schema);
+            const currentEntries = (Array.isArray(next[kind]) ? next[kind] : []) as JSONSchema[];
+            next[kind] = [...currentEntries, { type: "string" }];
+            onChange(next);
+          }}
+        >
+          Add {kind} Entry
+        </button>
+      </div>
     </div>
   );
 }
@@ -1683,21 +1685,6 @@ function SchemaMapEditor({
     <div className="raf-builder-block">
       <FieldLabel label={title} keyword={title} labelType="heading" />
 
-      <div className="raf-button-row">
-        <button
-          className="raf-button raf-button-secondary"
-          type="button"
-          onClick={() => {
-            const nextMap = { ...schemaMap };
-            const newKey = createUniqueEntryName(nextMap, "field");
-            nextMap[newKey] = defaultSchemaFactory();
-            onChange(nextMap);
-          }}
-        >
-          {addButtonLabel}
-        </button>
-      </div>
-
       {Object.entries(schemaMap).map(([entryName, entrySchema], index) => (
         <div className="raf-builder-property" key={`${title}-${index}`}>
           <div className="raf-builder-grid">
@@ -1752,6 +1739,21 @@ function SchemaMapEditor({
           </div>
         </div>
       ))}
+
+      <div className="raf-button-row">
+        <button
+          className="raf-button raf-button-secondary"
+          type="button"
+          onClick={() => {
+            const nextMap = { ...schemaMap };
+            const newKey = createUniqueEntryName(nextMap, "field");
+            nextMap[newKey] = defaultSchemaFactory();
+            onChange(nextMap);
+          }}
+        >
+          {addButtonLabel}
+        </button>
+      </div>
     </div>
   );
 }

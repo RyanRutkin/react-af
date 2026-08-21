@@ -8,7 +8,7 @@ import { SchemaFormObject } from "./fields/SchemaFormObject";
 import { SchemaFormSelect } from "./fields/SchemaFormSelect";
 import { SchemaFormString } from "./fields/SchemaFormString";
 import type { FieldComponentProps, SchemaFormArrayProps, SchemaFormObjectProps, SchemaFormWidgets } from "../types/components";
-import type { JSONSchema } from "../types/schema";
+import type { JSONSchema, JSONSchemaType } from "../types/schema";
 import { createDefaultValueFromSchema } from "../utils/defaultData";
 import { joinPointer } from "../utils/jsonPointer";
 
@@ -34,8 +34,8 @@ export function SchemaFieldRenderer(props: SchemaFieldRendererProps) {
   const hasTypeChoices = schemaTypes.length > 1;
   const hasEnum = Array.isArray(schema.enum) && schema.enum.length > 0;
   const inferredType = inferValueType(lockedValue, schemaTypes);
-  const [selectedType, setSelectedType] = useState<string | undefined>(() => inferredType ?? schemaTypes[0]);
-  const activeType = schemaTypes.includes(selectedType ?? "") ? (selectedType as string) : inferredType ?? schemaTypes[0];
+  const [selectedType, setSelectedType] = useState<JSONSchemaType | undefined>(() => inferredType ?? schemaTypes[0]);
+  const activeType = selectedType && schemaTypes.includes(selectedType) ? selectedType : inferredType ?? schemaTypes[0];
   const tupleItems = activeType === "array"
     ? Array.isArray(schema.prefixItems)
       ? schema.prefixItems
@@ -348,7 +348,7 @@ function getSchemaPointerWidget<TProps>(
   return candidate as ComponentType<TProps>;
 }
 
-function resolveType(schema: JSONSchema): string {
+function resolveType(schema: JSONSchema): JSONSchemaType {
   if (Array.isArray(schema.type) && schema.type.length > 0) {
     return schema.type[0];
   }
@@ -368,15 +368,15 @@ function resolveType(schema: JSONSchema): string {
   return "string";
 }
 
-function resolveTypes(schema: JSONSchema): string[] {
+function resolveTypes(schema: JSONSchema): JSONSchemaType[] {
   if (Array.isArray(schema.type) && schema.type.length > 0) {
-    return schema.type.filter((type): type is string => typeof type === "string");
+    return schema.type.filter((type): type is JSONSchemaType => typeof type === "string");
   }
 
   return [resolveType(schema)];
 }
 
-function inferValueType(value: unknown, schemaTypes: string[]): string | undefined {
+function inferValueType(value: unknown, schemaTypes: JSONSchemaType[]): JSONSchemaType | undefined {
   if (value === null && schemaTypes.includes("null")) {
     return "null";
   }
@@ -410,7 +410,7 @@ function inferValueType(value: unknown, schemaTypes: string[]): string | undefin
   return undefined;
 }
 
-function createDefaultValueForType(type: string): unknown {
+function createDefaultValueForType(type: JSONSchemaType): unknown {
   switch (type) {
     case "string":
       return "";
