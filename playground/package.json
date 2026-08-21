@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "check:imports": "vite build --logLevel error --emptyOutDir false",
     "preview": "vite preview",
     "test": "vitest run"
   },
   "dependencies": {
+    "@hyperjump/json-schema": "^1.17.8",
     "ajv": "^8.17.1",
     "json-pointer-relational": "^1.0.5",
     "react": "^19.1.1",
