@@ -617,10 +617,11 @@ export function SchemaBuilderHelper({
   debounceMs = 280,
   maxResults = 12,
   placeholder = "Type to search schema keyword guidance...",
+  initialQuery = "",
   helpContent
 }: SchemaBuilderHelperProps) {
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
   const helperEntries = useMemo(() => resolveHelperContentEntries(helpContent), [helpContent]);
 
   useEffect(() => {
@@ -823,9 +824,22 @@ interface SchemaNodeEditorProps {
   onRemove?: () => void;
   isRoot?: boolean;
   domain?: string;
+  primaryLeadField?: ReactNode;
+  primaryFollowField?: ReactNode;
+  showPrimaryTitle?: boolean;
 }
 
-function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, domain }: SchemaNodeEditorProps) {
+function SchemaNodeEditor({
+  schema,
+  label,
+  onChange,
+  onRemove,
+  isRoot = false,
+  domain,
+  primaryLeadField,
+  primaryFollowField,
+  showPrimaryTitle = isRoot
+}: SchemaNodeEditorProps) {
   const schemaTypes = getSchemaTypes(schema);
   const primaryType = schemaTypes.length === 1 ? schemaTypes[0] : undefined;
   const hasType = (type: JSONSchemaType) => schemaTypes.includes(type);
@@ -837,116 +851,16 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
       <summary className="raf-object-summary">{label}</summary>
       <div className="raf-object-content">
         <div className="raf-builder-grid">
-          {isRoot ? (
-            <>
-              <TextInput
-                label="$id"
-                keyword="$id"
-                value={editableRootId}
-                onChange={(value) => onChange(assignOptionalString(schema, "$id", toLocalId(value, domain)))}
-                helperText={domain ? `Full $id: ${fullRootId || "(empty)"}` : undefined}
-              />
-              <TextInput
-                label="$schema"
-                keyword="$schema"
-                value={stringOrEmpty(schema.$schema)}
-                onChange={(value) => onChange(assignOptionalString(schema, "$schema", value))}
-                placeholder={DEFAULT_SCHEMA_URI}
-              />
-            </>
+          {primaryLeadField}
+          {showPrimaryTitle ? (
+            <TextInput
+              label="Title"
+              keyword="title"
+              value={stringOrEmpty(schema.title)}
+              onChange={(value) => onChange(assignOptionalString(schema, "title", value))}
+            />
           ) : null}
-          <TextInput
-            label="$ref"
-            keyword="$ref"
-            value={stringOrEmpty(schema.$ref)}
-            onChange={(value) => onChange(assignOptionalString(schema, "$ref", value))}
-          />
-          <TextInput
-            label="Title"
-            keyword="title"
-            value={stringOrEmpty(schema.title)}
-            onChange={(value) => onChange(assignOptionalString(schema, "title", value))}
-          />
-        </div>
 
-        <TextAreaInput
-          label="Description"
-          keyword="description"
-          value={stringOrEmpty(schema.description)}
-          onChange={(value) => onChange(assignOptionalString(schema, "description", value))}
-        />
-
-        <div className="raf-builder-block">
-          <h4 className="raf-builder-heading">Meta-data</h4>
-
-          <div className="raf-builder-grid">
-            <KeywordCheckbox
-              label="deprecated"
-              keyword="deprecated"
-              checked={schema.deprecated === true}
-              onChange={(checked) => {
-                const next = cloneSchema(schema);
-                if (checked) {
-                  next.deprecated = true;
-                } else {
-                  delete next.deprecated;
-                }
-                onChange(next);
-              }}
-            />
-
-            <KeywordCheckbox
-              label="readOnly"
-              keyword="readOnly"
-              checked={schema.readOnly === true}
-              onChange={(checked) => {
-                const next = cloneSchema(schema);
-                if (checked) {
-                  next.readOnly = true;
-                } else {
-                  delete next.readOnly;
-                }
-                onChange(next);
-              }}
-            />
-
-            <KeywordCheckbox
-              label="writeOnly"
-              keyword="writeOnly"
-              checked={schema.writeOnly === true}
-              onChange={(checked) => {
-                const next = cloneSchema(schema);
-                if (checked) {
-                  next.writeOnly = true;
-                } else {
-                  delete next.writeOnly;
-                }
-                onChange(next);
-              }}
-            />
-          </div>
-
-          <JsonTextInput
-            label="examples"
-            keyword="examples"
-            value={schema.examples}
-            placeholder='e.g. ["sample", 1, true]'
-            onClear={() => {
-              const next = cloneSchema(schema);
-              delete next.examples;
-              onChange(next);
-            }}
-            onValidJson={(parsed) => {
-              if (!Array.isArray(parsed)) {
-                return;
-              }
-
-              onChange({ ...schema, examples: parsed });
-            }}
-          />
-        </div>
-
-        <div className="raf-builder-grid">
           <TypeListEditor
             value={schemaTypes}
             onChange={(nextTypes) => {
@@ -956,135 +870,266 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
               onChange(next);
             }}
           />
-          <JsonTextInput
-            label="Default (JSON)"
-            keyword="default"
-            value={schema.default}
-            placeholder='e.g. "abc", 42, true, {"k":"v"}'
-            onClear={() => {
-              const next = cloneSchema(schema);
-              delete next.default;
-              onChange(next);
-            }}
-            onValidJson={(parsed) => {
-              onChange({ ...schema, default: parsed });
-            }}
-          />
+
+          {primaryFollowField}
         </div>
 
-        <ConstEditor schema={schema} schemaTypes={schemaTypes} primaryType={primaryType} onChange={onChange} />
+        {hasType("object") ? <ObjectSchemaEditor schema={schema} onChange={onChange} showAdvancedOptions={false} /> : null}
 
-        <EnumEditor schema={schema} schemaTypes={schemaTypes} primaryType={primaryType} onChange={onChange} />
+        <BuilderDisclosureSection title="More Details">
+          <BuilderDisclosureSection title="Documentation & References" defaultOpen={true}>
 
-        {hasType("string") ? (
-          <>
             <div className="raf-builder-grid">
+              {!showPrimaryTitle ? (
+                <TextInput
+                  label="Title"
+                  keyword="title"
+                  value={stringOrEmpty(schema.title)}
+                  onChange={(value) => onChange(assignOptionalString(schema, "title", value))}
+                />
+              ) : null}
+
               <TextInput
-                label="minLength"
-                keyword="minLength"
-                value={numberOrEmpty(schema.minLength)}
-                onChange={(value) => onChange(assignOptionalInteger(schema, "minLength", value))}
-                type="number"
-                step="1"
-                placeholder="e.g. 1"
+                label="$ref"
+                keyword="$ref"
+                value={stringOrEmpty(schema.$ref)}
+                onChange={(value) => onChange(assignOptionalString(schema, "$ref", value))}
               />
+
               <TextInput
-                label="maxLength"
-                keyword="maxLength"
-                value={numberOrEmpty(schema.maxLength)}
-                onChange={(value) => onChange(assignOptionalInteger(schema, "maxLength", value))}
-                type="number"
-                step="1"
-                placeholder="e.g. 255"
+                label="$id"
+                keyword="$id"
+                value={editableRootId}
+                onChange={(value) => onChange(assignOptionalString(schema, "$id", isRoot ? toLocalId(value, domain) : value))}
+                helperText={isRoot && domain ? `Full $id: ${fullRootId || "(empty)"}` : undefined}
+              />
+
+              <TextInput
+                label="$schema"
+                keyword="$schema"
+                value={stringOrEmpty(schema.$schema)}
+                onChange={(value) => onChange(assignOptionalString(schema, "$schema", value))}
+                placeholder={DEFAULT_SCHEMA_URI}
               />
             </div>
-            <TextInput
-              label="Pattern"
-              keyword="pattern"
-              value={stringOrEmpty(schema.pattern)}
-              onChange={(value) => onChange(assignOptionalString(schema, "pattern", value))}
-              placeholder="e.g. ^[A-Za-z]+$"
+
+            <TextAreaInput
+              label="Description"
+              keyword="description"
+              value={stringOrEmpty(schema.description)}
+              onChange={(value) => onChange(assignOptionalString(schema, "description", value))}
             />
-            <TypeaheadInput
-              label="format"
-              keyword="format"
-              value={stringOrEmpty(schema.format)}
-              onChange={(value) => onChange(assignOptionalString(schema, "format", value))}
-              options={AJV_SUPPORTED_FORMATS}
-              placeholder="e.g. email"
-            />
-          </>
-        ) : null}
+          </BuilderDisclosureSection>
 
-        {hasType("number") || hasType("integer") ? (
-          <>
+          <BuilderDisclosureSection title="Meta-data" defaultOpen={true}>
+
             <div className="raf-builder-grid">
-              <TextInput
-                label="Min"
-                keyword="minimum"
-                value={numberOrEmpty(schema.minimum)}
-                onChange={(value) => onChange(assignOptionalNumber(schema, "minimum", value))}
-                type="number"
-                step="any"
-                placeholder="e.g. 0"
+              <KeywordCheckbox
+                label="deprecated"
+                keyword="deprecated"
+                checked={schema.deprecated === true}
+                onChange={(checked) => {
+                  const next = cloneSchema(schema);
+                  if (checked) {
+                    next.deprecated = true;
+                  } else {
+                    delete next.deprecated;
+                  }
+                  onChange(next);
+                }}
               />
-              <TextInput
-                label="Max"
-                keyword="maximum"
-                value={numberOrEmpty(schema.maximum)}
-                onChange={(value) => onChange(assignOptionalNumber(schema, "maximum", value))}
-                type="number"
-                step="any"
-                placeholder="e.g. 100"
+
+              <KeywordCheckbox
+                label="readOnly"
+                keyword="readOnly"
+                checked={schema.readOnly === true}
+                onChange={(checked) => {
+                  const next = cloneSchema(schema);
+                  if (checked) {
+                    next.readOnly = true;
+                  } else {
+                    delete next.readOnly;
+                  }
+                  onChange(next);
+                }}
+              />
+
+              <KeywordCheckbox
+                label="writeOnly"
+                keyword="writeOnly"
+                checked={schema.writeOnly === true}
+                onChange={(checked) => {
+                  const next = cloneSchema(schema);
+                  if (checked) {
+                    next.writeOnly = true;
+                  } else {
+                    delete next.writeOnly;
+                  }
+                  onChange(next);
+                }}
               />
             </div>
+
             <div className="raf-builder-grid">
-              <TextInput
-                label="multipleOf"
-                keyword="multipleOf"
-                value={numberOrEmpty(schema.multipleOf)}
-                onChange={(value) => onChange(assignOptionalPositiveNumber(schema, "multipleOf", value))}
-                type="number"
-                step="any"
-                placeholder="e.g. 0.5"
+              <JsonTextInput
+                label="Default (JSON)"
+                keyword="default"
+                value={schema.default}
+                placeholder='e.g. "abc", 42, true, {"k":"v"}'
+                onClear={() => {
+                  const next = cloneSchema(schema);
+                  delete next.default;
+                  onChange(next);
+                }}
+                onValidJson={(parsed) => {
+                  onChange({ ...schema, default: parsed });
+                }}
               />
-              <TextInput
-                label="exclusiveMinimum"
-                keyword="exclusiveMinimum"
-                value={numberOrEmpty(schema.exclusiveMinimum)}
-                onChange={(value) => onChange(assignOptionalNumber(schema, "exclusiveMinimum", value))}
-                type="number"
-                step="any"
-                placeholder="e.g. 0"
-              />
-              <TextInput
-                label="exclusiveMaximum"
-                keyword="exclusiveMaximum"
-                value={numberOrEmpty(schema.exclusiveMaximum)}
-                onChange={(value) => onChange(assignOptionalNumber(schema, "exclusiveMaximum", value))}
-                type="number"
-                step="any"
-                placeholder="e.g. 100"
+
+              <JsonTextInput
+                label="examples"
+                keyword="examples"
+                value={schema.examples}
+                placeholder='e.g. ["sample", 1, true]'
+                onClear={() => {
+                  const next = cloneSchema(schema);
+                  delete next.examples;
+                  onChange(next);
+                }}
+                onValidJson={(parsed) => {
+                  if (!Array.isArray(parsed)) {
+                    return;
+                  }
+
+                  onChange({ ...schema, examples: parsed });
+                }}
               />
             </div>
-          </>
-        ) : null}
+          </BuilderDisclosureSection>
 
-        {hasType("object") ? (
-          <ObjectSchemaEditor schema={schema} onChange={onChange} />
-        ) : null}
+          <BuilderDisclosureSection title="Value Rules" defaultOpen={true}>
+            <ConstEditor schema={schema} schemaTypes={schemaTypes} primaryType={primaryType} onChange={onChange} />
+            <EnumEditor schema={schema} schemaTypes={schemaTypes} primaryType={primaryType} onChange={onChange} />
+          </BuilderDisclosureSection>
 
-        {hasType("array") ? (
-          <ArraySchemaEditor schema={schema} onChange={onChange} />
-        ) : null}
+          {hasType("string") ? (
+            <BuilderDisclosureSection title="String Constraints" defaultOpen={true}>
+              <div className="raf-builder-grid">
+                <TextInput
+                  label="minLength"
+                  keyword="minLength"
+                  value={numberOrEmpty(schema.minLength)}
+                  onChange={(value) => onChange(assignOptionalInteger(schema, "minLength", value))}
+                  type="number"
+                  step="1"
+                  placeholder="e.g. 1"
+                />
+                <TextInput
+                  label="maxLength"
+                  keyword="maxLength"
+                  value={numberOrEmpty(schema.maxLength)}
+                  onChange={(value) => onChange(assignOptionalInteger(schema, "maxLength", value))}
+                  type="number"
+                  step="1"
+                  placeholder="e.g. 255"
+                />
+              </div>
+              <TextInput
+                label="Pattern"
+                keyword="pattern"
+                value={stringOrEmpty(schema.pattern)}
+                onChange={(value) => onChange(assignOptionalString(schema, "pattern", value))}
+                placeholder="e.g. ^[A-Za-z]+$"
+              />
+              <TypeaheadInput
+                label="format"
+                keyword="format"
+                value={stringOrEmpty(schema.format)}
+                onChange={(value) => onChange(assignOptionalString(schema, "format", value))}
+                options={AJV_SUPPORTED_FORMATS}
+                placeholder="e.g. email"
+              />
+            </BuilderDisclosureSection>
+          ) : null}
 
-        <CombinationEditor kind="allOf" schema={schema} onChange={onChange} />
-        <CombinationEditor kind="anyOf" schema={schema} onChange={onChange} />
-        <CombinationEditor kind="oneOf" schema={schema} onChange={onChange} />
-        <SingleSchemaEditor kind="not" schema={schema} onChange={onChange} />
-        <ConditionalSchemaEditor kind="if" schema={schema} onChange={onChange} />
-        <ConditionalSchemaEditor kind="then" schema={schema} onChange={onChange} />
-        <ConditionalSchemaEditor kind="else" schema={schema} onChange={onChange} />
+          {hasType("number") || hasType("integer") ? (
+            <BuilderDisclosureSection title="Number Constraints" defaultOpen={true}>
+              <div className="raf-builder-grid">
+                <TextInput
+                  label="Min"
+                  keyword="minimum"
+                  value={numberOrEmpty(schema.minimum)}
+                  onChange={(value) => onChange(assignOptionalNumber(schema, "minimum", value))}
+                  type="number"
+                  step="any"
+                  placeholder="e.g. 0"
+                />
+                <TextInput
+                  label="Max"
+                  keyword="maximum"
+                  value={numberOrEmpty(schema.maximum)}
+                  onChange={(value) => onChange(assignOptionalNumber(schema, "maximum", value))}
+                  type="number"
+                  step="any"
+                  placeholder="e.g. 100"
+                />
+              </div>
+              <div className="raf-builder-grid">
+                <TextInput
+                  label="multipleOf"
+                  keyword="multipleOf"
+                  value={numberOrEmpty(schema.multipleOf)}
+                  onChange={(value) => onChange(assignOptionalPositiveNumber(schema, "multipleOf", value))}
+                  type="number"
+                  step="any"
+                  placeholder="e.g. 0.5"
+                />
+                <TextInput
+                  label="exclusiveMinimum"
+                  keyword="exclusiveMinimum"
+                  value={numberOrEmpty(schema.exclusiveMinimum)}
+                  onChange={(value) => onChange(assignOptionalNumber(schema, "exclusiveMinimum", value))}
+                  type="number"
+                  step="any"
+                  placeholder="e.g. 0"
+                />
+                <TextInput
+                  label="exclusiveMaximum"
+                  keyword="exclusiveMaximum"
+                  value={numberOrEmpty(schema.exclusiveMaximum)}
+                  onChange={(value) => onChange(assignOptionalNumber(schema, "exclusiveMaximum", value))}
+                  type="number"
+                  step="any"
+                  placeholder="e.g. 100"
+                />
+              </div>
+            </BuilderDisclosureSection>
+          ) : null}
+
+          {hasType("array") ? (
+            <BuilderDisclosureSection title="Array Rules" defaultOpen={true}>
+              <ArraySchemaEditor schema={schema} onChange={onChange} />
+            </BuilderDisclosureSection>
+          ) : null}
+
+          {hasType("object") ? (
+            <BuilderDisclosureSection title="Object Rules" defaultOpen={true}>
+              <ObjectSchemaAdvancedEditor schema={schema} onChange={onChange} />
+            </BuilderDisclosureSection>
+          ) : null}
+
+          <BuilderDisclosureSection title="Composition & Conditionals" defaultOpen={true}>
+            <div className="raf-builder-section-group">
+              <CombinationEditor kind="allOf" schema={schema} onChange={onChange} />
+              <CombinationEditor kind="anyOf" schema={schema} onChange={onChange} />
+              <CombinationEditor kind="oneOf" schema={schema} onChange={onChange} />
+              <SingleSchemaEditor kind="not" schema={schema} onChange={onChange} />
+              <ConditionalSchemaEditor kind="if" schema={schema} onChange={onChange} />
+              <ConditionalSchemaEditor kind="then" schema={schema} onChange={onChange} />
+              <ConditionalSchemaEditor kind="else" schema={schema} onChange={onChange} />
+            </div>
+          </BuilderDisclosureSection>
+        </BuilderDisclosureSection>
 
         {!isRoot && onRemove ? (
           <div className="raf-button-row">
@@ -1098,24 +1143,170 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
   );
 }
 
-function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange: (next: JSONSchema) => void }) {
+function BuilderDisclosureSection({
+  title,
+  children,
+  defaultOpen = false
+}: {
+  title: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details className="raf-builder-disclosure" open={defaultOpen}>
+      <summary className="raf-builder-disclosure-summary">{title}</summary>
+      <div className="raf-builder-disclosure-content">{children}</div>
+    </details>
+  );
+}
+
+function ObjectSchemaEditor({
+  schema,
+  onChange,
+  showAdvancedOptions = true
+}: {
+  schema: JSONSchema;
+  onChange: (next: JSONSchema) => void;
+  showAdvancedOptions?: boolean;
+}) {
   const properties = schema.properties ?? {};
+  const requiredSet = new Set(schema.required ?? []);
+
+  return (
+    <div className="raf-builder-block">
+      <div className="raf-builder-heading-wrap">
+        <h4 className="raf-builder-heading">Properties</h4>
+        <FieldLabel label="properties" keyword="properties" />
+      </div>
+
+      {Object.entries(properties).map(([propertyName, propertySchema], index) => (
+        <div className="raf-builder-property" key={index}>
+          <SchemaNodeEditor
+            label={`Property: ${propertyName}`}
+            schema={propertySchema}
+            showPrimaryTitle={false}
+            primaryLeadField={
+              <TextInput
+                label="Property Name"
+                keyword="properties"
+                value={propertyName}
+                onChange={(nextName) => {
+                  const normalized = nextName.trim();
+                  if (normalized === propertyName) {
+                    return;
+                  }
+
+                  if (normalized === "") {
+                    const next = cloneSchema(schema);
+                    const objectProperties = { ...(next.properties ?? {}) };
+                    objectProperties[""] = objectProperties[propertyName];
+                    if (propertyName !== "") {
+                      delete objectProperties[propertyName];
+                    }
+                    next.properties = objectProperties;
+                    next.required = (next.required ?? []).filter((entry) => entry !== propertyName);
+                    onChange(next);
+                    return;
+                  }
+
+                  const next = cloneSchema(schema);
+                  const objectProperties = { ...(next.properties ?? {}) };
+
+                  if (objectProperties[normalized]) {
+                    return;
+                  }
+
+                  objectProperties[normalized] = objectProperties[propertyName];
+                  delete objectProperties[propertyName];
+                  next.properties = objectProperties;
+
+                  const required = new Set(next.required ?? []);
+                  if (required.delete(propertyName)) {
+                    required.add(normalized);
+                    next.required = Array.from(required);
+                  }
+
+                  onChange(next);
+                }}
+              />
+            }
+            primaryFollowField={
+              <KeywordCheckbox
+                label="Required"
+                keyword="required"
+                checked={requiredSet.has(propertyName)}
+                onChange={(checked) => {
+                  const next = cloneSchema(schema);
+                  const required = new Set(next.required ?? []);
+
+                  if (checked) {
+                    required.add(propertyName);
+                  } else {
+                    required.delete(propertyName);
+                  }
+
+                  next.required = Array.from(required);
+                  onChange(next);
+                }}
+              />
+            }
+            onChange={(nextPropertySchema) => {
+              const next = cloneSchema(schema);
+              next.properties = { ...(next.properties ?? {}), [propertyName]: nextPropertySchema };
+              onChange(next);
+            }}
+            onRemove={() => {
+              const next = cloneSchema(schema);
+              const objectProperties = { ...(next.properties ?? {}) };
+              delete objectProperties[propertyName];
+              next.properties = objectProperties;
+              next.required = (next.required ?? []).filter((entry) => entry !== propertyName);
+              onChange(next);
+            }}
+          />
+        </div>
+      ))}
+
+      <div className="raf-button-row">
+        <button
+          className="raf-button raf-button-primary"
+          type="button"
+          onClick={() => {
+            const next = cloneSchema(schema);
+            next.properties = { ...(next.properties ?? {}) };
+            const newKey = createUniquePropertyName(next.properties, "field");
+            next.properties[newKey] = { type: "string" };
+            onChange(next);
+          }}
+        >
+          Add Property
+        </button>
+      </div>
+
+      {showAdvancedOptions ? <ObjectSchemaAdvancedEditor schema={schema} onChange={onChange} /> : null}
+    </div>
+  );
+}
+
+function ObjectSchemaAdvancedEditor({ schema, onChange }: { schema: JSONSchema; onChange: (next: JSONSchema) => void }) {
   const dependentRequired = schema.dependentRequired ?? {};
   const dependentSchemas = schema.dependentSchemas ?? {};
   const patternProperties = schema.patternProperties ?? {};
-  const requiredSet = new Set(schema.required ?? []);
-  const additionalPropertiesEnabled = schema.additionalProperties !== false;
+  const additionalPropertiesSchema = isObject(schema.additionalProperties)
+    ? (schema.additionalProperties as JSONSchema)
+    : undefined;
+  const additionalPropertiesMode = additionalPropertiesSchema
+    ? "subschema"
+    : schema.additionalProperties === false
+      ? "false"
+      : "true";
   const propertyNamesSchema = isObject(schema.propertyNames) ? (schema.propertyNames as JSONSchema) : undefined;
   const unevaluatedPropertiesSchema = isObject(schema.unevaluatedProperties)
     ? (schema.unevaluatedProperties as JSONSchema)
     : undefined;
 
   return (
-    <div className="raf-builder-block">
-      <div className="raf-builder-heading-wrap">
-        <h4 className="raf-builder-heading">Object Properties</h4>
-        <FieldLabel label="properties" keyword="properties" />
-      </div>
+    <>
 
       <div className="raf-builder-grid">
         <TextInput
@@ -1138,26 +1329,48 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
         />
       </div>
 
-      <KeywordCheckbox
+      <SelectInput
         label="additionalProperties"
         keyword="additionalProperties"
-        checked={additionalPropertiesEnabled}
-        onChange={(checked) => {
+        value={additionalPropertiesMode}
+        onChange={(value) => {
           const next = cloneSchema(schema);
 
-          if (checked) {
-            if (isObject(next.additionalProperties)) {
-              next.additionalProperties = next.additionalProperties as JSONSchema;
-            } else {
-              next.additionalProperties = true;
-            }
-          } else {
+          if (value === "subschema") {
+            next.additionalProperties = isObject(next.additionalProperties)
+              ? (next.additionalProperties as JSONSchema)
+              : { type: "string" };
+          } else if (value === "false") {
             next.additionalProperties = false;
+          } else {
+            next.additionalProperties = true;
           }
 
           onChange(next);
         }}
+        options={[
+          { value: "true", label: "True" },
+          { value: "false", label: "False" },
+          { value: "subschema", label: "Sub-schema" }
+        ]}
       />
+
+      {additionalPropertiesSchema ? (
+        <SchemaNodeEditor
+          label="additionalProperties"
+          schema={additionalPropertiesSchema}
+          onChange={(nextAdditionalPropertiesSchema) => {
+            const next = cloneSchema(schema);
+            next.additionalProperties = nextAdditionalPropertiesSchema;
+            onChange(next);
+          }}
+          onRemove={() => {
+            const next = cloneSchema(schema);
+            next.additionalProperties = true;
+            onChange(next);
+          }}
+        />
+      ) : null}
 
       <div className="raf-builder-block">
         <FieldLabel label="unevaluatedProperties" keyword="unevaluatedProperties" labelType="heading" />
@@ -1371,110 +1584,7 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
           onChange(next);
         }}
       />
-
-      {Object.entries(properties).map(([propertyName, propertySchema], index) => (
-        <div className="raf-builder-property" key={index}>
-          <div className="raf-builder-grid">
-            <TextInput
-              label="Property Name"
-              keyword="properties"
-              value={propertyName}
-              onChange={(nextName) => {
-                const normalized = nextName.trim();
-                if (normalized === propertyName) {
-                  return;
-                }
-
-                if (normalized === "") {
-                  const next = cloneSchema(schema);
-                  const objectProperties = { ...(next.properties ?? {}) };
-                  objectProperties[""] = objectProperties[propertyName];
-                  if (propertyName !== "") {
-                    delete objectProperties[propertyName];
-                  }
-                  next.properties = objectProperties;
-                  next.required = (next.required ?? []).filter((entry) => entry !== propertyName);
-                  onChange(next);
-                  return;
-                }
-
-                const next = cloneSchema(schema);
-                const objectProperties = { ...(next.properties ?? {}) };
-
-                if (objectProperties[normalized]) {
-                  return;
-                }
-
-                objectProperties[normalized] = objectProperties[propertyName];
-                delete objectProperties[propertyName];
-                next.properties = objectProperties;
-
-                const required = new Set(next.required ?? []);
-                if (required.delete(propertyName)) {
-                  required.add(normalized);
-                  next.required = Array.from(required);
-                }
-
-                onChange(next);
-              }}
-            />
-
-            <KeywordCheckbox
-              label="Required"
-              keyword="required"
-              checked={requiredSet.has(propertyName)}
-              onChange={(checked) => {
-                const next = cloneSchema(schema);
-                const required = new Set(next.required ?? []);
-
-                if (checked) {
-                  required.add(propertyName);
-                } else {
-                  required.delete(propertyName);
-                }
-
-                next.required = Array.from(required);
-                onChange(next);
-              }}
-            />
-          </div>
-
-          <SchemaNodeEditor
-            label={`Property: ${propertyName}`}
-            schema={propertySchema}
-            onChange={(nextPropertySchema) => {
-              const next = cloneSchema(schema);
-              next.properties = { ...(next.properties ?? {}), [propertyName]: nextPropertySchema };
-              onChange(next);
-            }}
-            onRemove={() => {
-              const next = cloneSchema(schema);
-              const objectProperties = { ...(next.properties ?? {}) };
-              delete objectProperties[propertyName];
-              next.properties = objectProperties;
-              next.required = (next.required ?? []).filter((entry) => entry !== propertyName);
-              onChange(next);
-            }}
-          />
-        </div>
-      ))}
-
-      <div className="raf-button-row">
-        <button
-          className="raf-button raf-button-primary"
-          type="button"
-          onClick={() => {
-            const next = cloneSchema(schema);
-            next.properties = { ...(next.properties ?? {}) };
-            const newKey = createUniquePropertyName(next.properties, "field");
-            next.properties[newKey] = { type: "string" };
-            onChange(next);
-          }}
-        >
-          Add Property
-        </button>
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -2050,7 +2160,7 @@ function TypeListEditor({
       <FieldLabel label="Types" keyword="type" />
 
       {value.map((type, index) => (
-        <div className="raf-button-row" key={`type-${index}`}>
+        <div className="raf-button-row raf-type-list-row" key={`type-${index}`}>
           <select
             className="raf-select raf-builder-control"
             aria-label={`Type ${index + 1}`}
@@ -2088,7 +2198,7 @@ function TypeListEditor({
         </div>
       ))}
 
-      <div className="raf-button-row">
+      <div className="raf-button-row raf-type-list-add-row">
         <button
           className="raf-button raf-button-secondary"
           type="button"
@@ -2330,6 +2440,33 @@ function TextInput({
         onChange={(event) => onChange(event.target.value)}
       />
       {helperText ? <div className="raf-muted">{helperText}</div> : null}
+    </label>
+  );
+}
+
+function SelectInput({
+  label,
+  keyword,
+  value,
+  onChange,
+  options
+}: {
+  label: string;
+  keyword?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <label className="raf-field">
+      <FieldLabel label={label} keyword={keyword} />
+      <select className="raf-select raf-builder-control" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }
@@ -3369,6 +3506,10 @@ function sanitizeSchemaForOutput(schema: JSONSchema): JSONSchema {
     next.not = sanitizeSchemaForOutput(next.not as JSONSchema);
   }
 
+  if (isObject(next.additionalProperties)) {
+    next.additionalProperties = sanitizeSchemaForOutput(next.additionalProperties as JSONSchema);
+  }
+
   if (isObject(next.unevaluatedProperties)) {
     next.unevaluatedProperties = sanitizeSchemaForOutput(next.unevaluatedProperties as JSONSchema);
   }
@@ -3582,6 +3723,12 @@ function validateConstAndEnumConsistency(schema: JSONSchema, schemaPointer = "")
 
   if (isObject(schema.not)) {
     errors.push(...validateConstAndEnumConsistency(schema.not as JSONSchema, `${schemaPointer}/not`));
+  }
+
+  if (isObject(schema.additionalProperties)) {
+    errors.push(
+      ...validateConstAndEnumConsistency(schema.additionalProperties as JSONSchema, `${schemaPointer}/additionalProperties`)
+    );
   }
 
   if (isObject(schema.unevaluatedProperties)) {

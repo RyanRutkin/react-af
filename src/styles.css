@@ -156,17 +156,27 @@
 .raf-button-secondary {
   background: #eef2f6;
   color: #1d2939;
+  border: 1px solid #cfd7e3;
 }
 
 .raf-button-danger {
   background: #fee4e2;
   color: #b42318;
+  border: 1px solid #f3b8b2;
 }
 
 .raf-button-row {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.raf-type-list-row + .raf-type-list-row {
+  margin-top: 4px;
+}
+
+.raf-type-list-add-row {
+  margin-top: 8px;
 }
 
 .raf-info-button {
@@ -291,6 +301,31 @@
   padding: 10px;
   margin: 10px 0;
   background: #ffffff;
+}
+
+.raf-builder-disclosure {
+  margin: 10px 0 12px;
+  border: 1px solid #d9dce1;
+  border-radius: 10px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.raf-builder-disclosure-summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #344054;
+  user-select: none;
+}
+
+.raf-builder-disclosure-content {
+  padding: 0 10px 10px;
+}
+
+.raf-builder-section-group > .raf-builder-block:last-child {
+  margin-bottom: 0;
 }
 
 .raf-textarea {
@@ -511,7 +546,6 @@
     grid-template-columns: 1fr;
   }
 }
-
 @media (max-width: 760px) {
   .raf-info-layer {
     background: rgba(15, 23, 42, 0.28);

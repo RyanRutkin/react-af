@@ -80,6 +80,7 @@ export interface SchemaBuilderHelperProps {
   debounceMs?: number;
   maxResults?: number;
   placeholder?: string;
+  initialQuery?: string;
   helpContent?: SchemaBuilderHelperContent;
 }
 

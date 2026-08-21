@@ -218,12 +218,14 @@ body {
   will-change: transform, opacity;
 }
 
-.play-builder-sidecard-result {
-  transform-origin: left center;
+.play-builder-sidebar-panels-forward .play-builder-sidecard-result,
+.play-builder-sidebar-panels-forward .play-builder-sidecard-assistant {
+  transform-origin: right center;
 }
 
-.play-builder-sidecard-assistant {
-  transform-origin: right center;
+.play-builder-sidebar-panels-backward .play-builder-sidecard-result,
+.play-builder-sidebar-panels-backward .play-builder-sidecard-assistant {
+  transform-origin: left center;
 }
 
 .play-builder-sidecard-active {

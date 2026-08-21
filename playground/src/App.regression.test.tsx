@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 
@@ -11,6 +11,20 @@ async function showSchemaForm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("Playground regression guards", () => {
+  it("auto-populates Keyword Assistant with condition and displays results", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const helperSearch = await screen.findByRole("textbox", { name: "Search SchemaBuilder keyword help" });
+    expect((helperSearch as HTMLInputElement).value).toBe("condition");
+
+    const helperResults = await screen.findByRole("region", { name: "SchemaBuilder helper results" });
+    await waitFor(() => {
+      expect(helperResults.querySelectorAll(".raf-helper-snippet").length).toBeGreaterThan(0);
+    });
+  });
+
   it("keeps SchemaBuilder result Form mode stable when adding an array item", async () => {
     const user = userEvent.setup();
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -941,6 +955,45 @@ describe("Playground regression guards", () => {
     const previewText = preview?.textContent ?? "";
 
     expect(previewText).toContain('"propertyNames"');
+  });
+
+  it("supports additionalProperties sub-schema in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "object");
+
+    await user.click(await property.findByText("More Details"));
+
+    const additionalPropertiesSelect = await property.findByRole("combobox", { name: "additionalProperties" });
+    await user.selectOptions(additionalPropertiesSelect, "subschema");
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+    const previewSchema = JSON.parse(previewText) as {
+      properties?: Record<string, { additionalProperties?: unknown }>;
+    };
+
+    expect(previewSchema.properties?.field?.additionalProperties).toEqual({ type: "string" });
   });
 
   it("clears not and propertyNames blocks from SchemaBuilder output", async () => {
