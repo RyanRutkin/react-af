@@ -6,7 +6,15 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  external: ["react", "react-dom", "ajv", "ajv/dist/2019", "ajv/dist/2020", "json-pointer-relational"],
+  external: [
+    "react",
+    "react-dom",
+    "ajv",
+    "ajv/dist/2019",
+    "ajv/dist/2020",
+    "json-pointer-relational",
+    "html-react-parser"
+  ],
   loader: {
     ".css": "copy"
   }

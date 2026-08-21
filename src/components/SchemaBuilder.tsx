@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import parse from "html-react-parser";
 import type { SchemaBuilderProps, SchemaBuilderValidationError } from "../types/components";
 import type { JSONSchema, JSONSchemaType } from "../types/schema";
 import { AJV_SUPPORTED_FORMATS, createAjvForSchema } from "../utils/schemaValidation";
@@ -10,10 +11,431 @@ const FIELD_TYPES: JSONSchemaType[] = ["string", "number", "integer", "boolean",
 
 const DEFAULT_SCHEMA_URI = "https://json-schema.org/draft/2020-12/schema";
 
+type HelpAnchorRect = { top: number; left: number; bottom: number; right: number };
+
+interface ActiveFieldHelp {
+  key: string;
+  label: string;
+  anchor: HelpAnchorRect;
+}
+
+interface KeywordHelpDefinition {
+  summary: string;
+  details: string;
+  longDetails: string;
+  link: string;
+}
+
+interface FieldHelpContextValue {
+  openHelp: (key: string, label: string, anchor: HelpAnchorRect) => void;
+}
+
+const FieldHelpContext = createContext<FieldHelpContextValue | null>(null);
+
+const FIELD_HELP_BASE_CONTENT: Record<string, Pick<KeywordHelpDefinition, "summary" | "details">> = {
+  "$id": {
+    summary: "Sets the base URI that identifies this schema.",
+    details:
+      "Use <strong>$id</strong> to assign a stable identifier for the schema resource. Relative references and nested schema identifiers are resolved against this base URI."
+  },
+  "$schema": {
+    summary: "Declares which JSON Schema dialect this schema uses.",
+    details:
+      "Set <strong>$schema</strong> to the meta-schema URI for the draft you target, such as 2020-12. Validators use it to interpret keyword behavior and vocabulary support."
+  },
+  "$ref": {
+    summary: "References another schema and applies it at this location.",
+    details:
+      "Use <strong>$ref</strong> to point to a schema URI or JSON Pointer. Validation of this node is delegated to the referenced schema, allowing reuse and composition."
+  },
+  type: {
+    summary: "Restricts instance values to one or more JSON types.",
+    details:
+      "Set <strong>type</strong> to a single <strong>type</strong> or a list of allowed types. This controls which instances can match and which <strong>type</strong>-specific assertion keywords are meaningful."
+  },
+  title: {
+    summary: "Provides a short human-readable name for the schema.",
+    details:
+      "Use <strong>title</strong> as annotation text for UI labels, documentation, and schema browsing. It does <strong>not</strong> affect assertion or pass/fail validation outcomes."
+  },
+  description: {
+    summary: "Provides longer human-readable documentation for the schema.",
+    details:
+      "Use <strong>description</strong> to explain intent, constraints, and <strong>examples</strong> in prose. It is an annotation keyword and does <strong>not</strong> directly change validation results."
+  },
+  deprecated: {
+    summary: "Marks values as discouraged for future use.",
+    details:
+      "Set <strong>deprecated</strong> to true to signal that this schema location should be phased out. It is metadata for tooling and consumers rather than an assertion failure."
+  },
+  readonly: {
+    summary: "Marks a value as read-only for producers and clients.",
+    details:
+      "<strong>readOnly</strong> is an annotation commonly used by APIs and forms to prevent user edits on output-only fields. It does <strong>not</strong> invalidate JSON instances by itself."
+  },
+  writeonly: {
+    summary: "Marks a value as write-only and not intended for output.",
+    details:
+      "<strong>writeOnly</strong> is an annotation used for sensitive or input-only fields. Tooling may hide these in responses while still accepting them in requests."
+  },
+  examples: {
+    summary: "Supplies sample instance values for this schema location.",
+    details:
+      "Use <strong>examples</strong> as annotation data to illustrate typical values. These samples support docs and UI guidance but are <strong>not</strong> automatically enforced as constraints."
+  },
+  default: {
+    summary: "Provides a suggested default value for consumers.",
+    details:
+      "<strong>default</strong> is an annotation that tools may use to prefill forms or generated objects. Validators do <strong>not</strong> automatically insert or require this value."
+  },
+  const: {
+    summary: "Requires the instance to equal exactly one value.",
+    details:
+      "Use <strong>const</strong> when a field must always be a specific literal value. The instance must match this value exactly, including <strong>type</strong> and structure."
+  },
+  enum: {
+    summary: "Restricts the instance to one of the listed values.",
+    details:
+      "<strong>enum</strong> defines an allowed set of values and the instance must equal one of them. Values can be strings, numbers, booleans, null, objects, or arrays."
+  },
+  minlength: {
+    summary: "Sets the minimum string length in Unicode code points.",
+    details:
+      "<strong>minLength</strong> requires string instances to have at least this many characters. Use it with <strong>maxLength</strong> to bound accepted string sizes."
+  },
+  maxlength: {
+    summary: "Sets the maximum string length in Unicode code points.",
+    details:
+      "<strong>maxLength</strong> requires string instances to be no longer than this value. It applies only when the instance <strong>type</strong> is string."
+  },
+  pattern: {
+    summary: "Requires strings to match a regular expression.",
+    details:
+      "<strong>pattern</strong> uses an ECMA-262 compatible regular expression. A string is valid when the regex finds a match within the instance text."
+  },
+  format: {
+    summary: "Annotates or optionally asserts semantic string formats.",
+    details:
+      "<strong>format</strong> communicates semantic expectations such as email, uri, or date-time. Depending on validator configuration, it may be informational or enforced."
+  },
+  minimum: {
+    summary: "Sets the inclusive numeric lower bound.",
+    details:
+      "<strong>minimum</strong> requires numbers to be greater than or equal to this value. Use <strong>exclusiveMinimum</strong> when the lower bound should be strict."
+  },
+  maximum: {
+    summary: "Sets the inclusive numeric upper bound.",
+    details:
+      "<strong>maximum</strong> requires numbers to be less than or equal to this value. Use <strong>exclusiveMaximum</strong> when the upper bound should be strict."
+  },
+  multipleof: {
+    summary: "Requires numbers to be a multiple of the given divisor.",
+    details:
+      "<strong>multipleOf</strong> checks exact divisibility by a positive number. It is useful for increments such as currency steps or fixed precision values."
+  },
+  exclusiveminimum: {
+    summary: "Sets a strict numeric lower bound.",
+    details:
+      "<strong>exclusiveMinimum</strong> requires numbers to be strictly greater than this value. Instances equal to the boundary are invalid."
+  },
+  exclusivemaximum: {
+    summary: "Sets a strict numeric upper bound.",
+    details:
+      "<strong>exclusiveMaximum</strong> requires numbers to be strictly less than this value. Instances equal to the boundary are invalid."
+  },
+  properties: {
+    summary: "Defines schemas for named object properties.",
+    details:
+      "<strong>properties</strong> maps property names to subschemas. When an instance has a matching property, that value is validated against the corresponding subschema."
+  },
+  required: {
+    summary: "Lists object properties that must be present.",
+    details:
+      "<strong>required</strong> is an array of property names. Each listed name must appear on the object instance for validation to succeed."
+  },
+  additionalproperties: {
+    summary: "Controls validation of object properties not listed in properties.",
+    details:
+      "<strong>additionalProperties</strong> applies to remaining object members after <strong>properties</strong> and <strong>patternProperties</strong>. Use false to disallow extras or a schema to validate them."
+  },
+  unevaluatedproperties: {
+    summary: "Applies constraints to object properties not yet evaluated.",
+    details:
+      "<strong>unevaluatedProperties</strong> validates leftover object members after all applicable subschemas are considered. It helps enforce closed shapes with composition."
+  },
+  propertynames: {
+    summary: "Validates each object property name as a string.",
+    details:
+      "<strong>propertyNames</strong> applies its subschema to every key name in the object. This is useful for naming rules such as patterns or length limits on keys."
+  },
+  minproperties: {
+    summary: "Sets the minimum number of object properties.",
+    details:
+      "<strong>minProperties</strong> requires objects to contain at least this many <strong>properties</strong>. It is ignored for non-object instances."
+  },
+  maxproperties: {
+    summary: "Sets the maximum number of object properties.",
+    details:
+      "<strong>maxProperties</strong> requires objects to contain no more than this many <strong>properties</strong>. It is ignored for non-object instances."
+  },
+  dependentrequired: {
+    summary: "Requires additional properties when a property is present.",
+    details:
+      "<strong>dependentRequired</strong> maps a property name to a list of peer <strong>properties</strong> that must also exist whenever that property appears."
+  },
+  dependentschemas: {
+    summary: "Applies additional schema rules when a property is present.",
+    details:
+      "<strong>dependentSchemas</strong> maps a property name to a subschema. <strong>If</strong> that property exists in the instance object, the entire object must satisfy the mapped schema."
+  },
+  patternproperties: {
+    summary: "Applies schemas to object properties that match regex keys.",
+    details:
+      "<strong>patternProperties</strong> uses regular-expression keys to target groups of property names. Matching <strong>properties</strong> are validated by the associated subschema."
+  },
+  items: {
+    summary: "Defines the schema for array elements after tuple positions.",
+    details:
+      "In 2020-12, <strong>items</strong> applies to array elements <strong>not</strong> covered by <strong>prefixItems</strong>. Set a schema to validate trailing elements, or false to disallow them."
+  },
+  prefixitems: {
+    summary: "Defines positional schemas for tuple-style arrays.",
+    details:
+      "<strong>prefixItems</strong> is an ordered list of schemas, each applied to the array element at the same index. It models fixed-position tuple structures."
+  },
+  minitems: {
+    summary: "Sets the minimum number of items in an array.",
+    details:
+      "<strong>minItems</strong> requires arrays to contain at least this many elements. It is ignored for non-array instances."
+  },
+  maxitems: {
+    summary: "Sets the maximum number of items in an array.",
+    details:
+      "<strong>maxItems</strong> requires arrays to contain no more than this many elements. It is ignored for non-array instances."
+  },
+  uniqueitems: {
+    summary: "Requires all array items to be pairwise unique.",
+    details:
+      "When <strong>uniqueItems</strong> is true, no two <strong>items</strong> in the array may be deeply equal. It enforces set-like semantics for arrays."
+  },
+  contains: {
+    summary: "Requires at least one array item to match a subschema.",
+    details:
+      "<strong>contains</strong> checks array elements against a subschema and succeeds when enough matches are found. Combine with <strong>minContains</strong> and <strong>maxContains</strong> for match counts."
+  },
+  mincontains: {
+    summary: "Sets the minimum number of contains matches.",
+    details:
+      "<strong>minContains</strong> works with <strong>contains</strong> and requires at least this many matching elements. It is ignored when <strong>contains</strong> is absent."
+  },
+  maxcontains: {
+    summary: "Sets the maximum number of contains matches.",
+    details:
+      "<strong>maxContains</strong> works with <strong>contains</strong> and requires no more than this many matching elements. It is ignored when <strong>contains</strong> is absent."
+  },
+  unevaluateditems: {
+    summary: "Applies constraints to array items not yet evaluated.",
+    details:
+      "<strong>unevaluatedItems</strong> validates leftover array elements after <strong>prefixItems</strong>, <strong>items</strong>, <strong>contains</strong>, and composed schemas are processed."
+  },
+  allof: {
+    summary: "Requires the instance to satisfy every listed subschema.",
+    details:
+      "<strong>allOf</strong> composes schemas with logical AND behavior. The instance is valid only <strong>if</strong> it passes all subschemas in the array."
+  },
+  anyof: {
+    summary: "Requires the instance to satisfy at least one subschema.",
+    details:
+      "<strong>anyOf</strong> composes schemas with logical OR behavior. The instance is valid when one or more listed subschemas validate."
+  },
+  oneof: {
+    summary: "Requires the instance to satisfy exactly one subschema.",
+    details:
+      "<strong>oneOf</strong> succeeds only when exactly one subschema validates. It is useful for mutually exclusive alternatives."
+  },
+  not: {
+    summary: "Requires the instance to fail a given subschema.",
+    details:
+      "<strong>not</strong> inverts schema logic. The instance is valid only when it does <strong>not</strong> validate against the <strong>not</strong> subschema."
+  },
+  if: {
+    summary: "Defines the condition used by conditional schemas.",
+    details:
+      "<strong>if</strong> applies a subschema test. When it passes, <strong>then</strong> is applied; when it fails, <strong>else</strong> is applied, <strong>if</strong> those branches are present."
+  },
+  then: {
+    summary: "Applies extra constraints when if succeeds.",
+    details:
+      "<strong>then</strong> is evaluated only when the <strong>if</strong> subschema validates. Use it to enforce rules that should hold under a matching condition."
+  },
+  else: {
+    summary: "Applies extra constraints when if fails.",
+    details:
+      "<strong>else</strong> is evaluated only when the <strong>if</strong> subschema does <strong>not</strong> validate. Use it as the alternate branch of conditional validation."
+  }
+};
+
+const FIELD_HELP_LONG_DETAILS: Record<string, string> = {
+  "$id": "The <strong>$id</strong> keyword establishes the canonical URI for a schema resource, which becomes the base for relative references and nested identifiers. In draft 2020-12, stable and absolute identifiers make schema reuse, bundling, and external referencing significantly more predictable across tools.",
+  "$schema": "The <strong>$schema</strong> keyword declares the dialect and meta-schema that define keyword behavior for this document. Declaring this explicitly helps validators select correct semantics and avoids ambiguity when multiple drafts are supported.",
+  "$ref": "The <strong>$ref</strong> keyword replaces local constraints with the referenced schema target, enabling modular schema design and reuse. In 2020-12, references participate in dynamic resolution rules and should be treated as schema application rather than a textual include.",
+  type: "The <strong>type</strong> keyword constrains instance types and is often the first line of validation structure for a field. In 2020-12, <strong>type</strong> can be a single value or an array of values to express unions, and other assertion keywords should align with the allowed types.",
+  title: "The <strong>title</strong> keyword is an annotation intended for human-facing tools such as documentation and generated forms. While it does <strong>not</strong> influence pass/fail validation, it is important for readability and schema maintainability.",
+  description: "The <strong>description</strong> keyword provides richer human guidance about expected data semantics and usage context. It is annotation-only, so it should be used to improve comprehension without being relied on for enforcement.",
+  deprecated: "The <strong>deprecated</strong> keyword communicates that a field or value path is still accepted but should be phased out. This is particularly useful for compatibility windows and migration planning in APIs and event schemas.",
+  readonly: "The <strong>readOnly</strong> keyword is an annotation that indicates values are intended to be supplied by producers and <strong>not</strong> edited by consumers. It is commonly interpreted by UI and API tooling even though it is <strong>not</strong> a direct validation assertion.",
+  writeonly: "The <strong>writeOnly</strong> keyword is an annotation indicating values are intended for input but should <strong>not</strong> be returned in output contexts. It is often used for secrets, credentials, and transient request-only fields.",
+  examples: "The <strong>examples</strong> keyword provides non-normative sample instances that help humans and tools understand expected values. These <strong>examples</strong> are documentation aids and are <strong>not</strong> <strong>required</strong> to be validated as constraints by implementations.",
+  default: "The <strong>default</strong> keyword suggests a value that may be used when an instance omits the field. Because JSON Schema does <strong>not</strong> mandate <strong>default</strong> assignment behavior, producers should treat it as guidance rather than implicit mutation.",
+  const: "The <strong>const</strong> keyword enforces exact deep-equality with one specific JSON value, including <strong>type</strong> and structure. It is useful when a discriminator or fixed contract token must always remain constant.",
+  enum: "The <strong>enum</strong> keyword constrains the instance to one of a finite set of values compared by JSON deep-equality. This is ideal for controlled vocabularies and closed option sets across both primitive and structured values.",
+  minlength: "The <strong>minLength</strong> keyword applies only to strings and sets a lower bound measured in Unicode code points. It should be paired thoughtfully with <strong>maxLength</strong> when defining bounded text fields.",
+  maxlength: "The <strong>maxLength</strong> keyword applies only to strings and sets an upper bound measured in Unicode code points. This protects payload size and supports UI, storage, and transport constraints.",
+  pattern: "The <strong>pattern</strong> keyword applies an ECMA-262 regular expression to string instances, succeeding when a match is found. Patterns are <strong>not</strong> implicitly anchored, so use explicit anchors when full-string matching is <strong>required</strong>.",
+  format: "The <strong>format</strong> keyword conveys semantic expectations such as email, URI, hostname, or date-time. In 2020-12, <strong>format</strong> behavior depends on implementation configuration and may be annotation-only unless assertions are enabled.",
+  minimum: "The <strong>minimum</strong> keyword sets an inclusive numeric lower bound and applies to number and integer instances. Use this when a boundary value itself is valid and should be accepted.",
+  maximum: "The <strong>maximum</strong> keyword sets an inclusive numeric upper bound and applies to number and integer instances. Use this when the boundary value itself should remain valid.",
+  multipleof: "The <strong>multipleOf</strong> keyword requires numeric values to divide evenly by a positive divisor. This is commonly used to enforce precision steps, measurement increments, and monetary granularity.",
+  exclusiveminimum: "The <strong>exclusiveMinimum</strong> keyword defines a strict numeric boundary where values must be greater than the threshold. It is appropriate when an endpoint must be excluded from valid input.",
+  exclusivemaximum: "The <strong>exclusiveMaximum</strong> keyword defines a strict numeric boundary where values must be less than the threshold. It is useful for open upper intervals and strict cap behavior.",
+  properties: "The <strong>properties</strong> keyword maps specific object member names to subschemas that validate corresponding member values. It only applies when those named members are present and does <strong>not</strong> by itself require their presence.",
+  required: "The <strong>required</strong> keyword lists object property names that must exist on an instance object. Presence is enforced independently from value constraints, which are validated by associated subschemas.",
+  additionalproperties: "The <strong>additionalProperties</strong> keyword controls validation for object members <strong>not</strong> matched by <strong>properties</strong> or <strong>patternProperties</strong>. In strict object designs, setting this to false prevents unrecognized keys from passing.",
+  unevaluatedproperties: "The <strong>unevaluatedProperties</strong> keyword applies after other applicators and targets object members that remain unevaluated. This makes it especially powerful with composition keywords when enforcing closed-world object shapes.",
+  propertynames: "The <strong>propertyNames</strong> keyword validates each object key string against a subschema, independent of corresponding values. It is useful for naming conventions, prefix rules, and machine-generated key constraints.",
+  minproperties: "The <strong>minProperties</strong> keyword sets the <strong>minimum</strong> count of key/value pairs <strong>required</strong> in an object instance. It supports cardinality rules independent from which exact <strong>properties</strong> are <strong>required</strong>.",
+  maxproperties: "The <strong>maxProperties</strong> keyword sets the <strong>maximum</strong> count of key/value pairs permitted in an object instance. This can prevent over-populated objects and constrain dynamic key scenarios.",
+  dependentrequired: "The <strong>dependentRequired</strong> keyword expresses conditional presence dependencies between object <strong>properties</strong>. When one property appears, a configured list of sibling <strong>properties</strong> must also be present.",
+  dependentschemas: "The <strong>dependentSchemas</strong> keyword applies whole-object subschemas when specific trigger <strong>properties</strong> are present. It enables conditional object validation patterns that go beyond simple <strong>required</strong> lists.",
+  patternproperties: "The <strong>patternProperties</strong> keyword assigns subschemas to regex-based key groups, allowing families of similarly named members to share validation rules. Multiple regexes may apply to the same property name.",
+  items: "In draft 2020-12, <strong>items</strong> applies to array positions <strong>not</strong> covered by <strong>prefixItems</strong> and therefore governs trailing elements. This separates tuple-prefix constraints from the schema for remaining array entries.",
+  prefixitems: "The <strong>prefixItems</strong> keyword defines positional schemas for tuple-like arrays where each index has a distinct rule. It is evaluated in order and is foundational for fixed-structure array contracts.",
+  minitems: "The <strong>minItems</strong> keyword sets the <strong>minimum</strong> number of elements <strong>required</strong> in an array instance. It is commonly combined with <strong>contains</strong> or tuple rules to ensure baseline completeness.",
+  maxitems: "The <strong>maxItems</strong> keyword sets the <strong>maximum</strong> number of elements permitted in an array instance. It is useful for preventing oversized arrays and bounding processing cost.",
+  uniqueitems: "When <strong>uniqueItems</strong> is true, every pair of array elements must be unequal under deep JSON comparison. This enforces set-like semantics, including for objects and arrays.",
+  contains: "The <strong>contains</strong> keyword requires array instances to include elements matching a given subschema. In 2020-12, it can be further quantified with <strong>minContains</strong> and <strong>maxContains</strong> to constrain match counts.",
+  mincontains: "The <strong>minContains</strong> keyword defines the <strong>minimum</strong> number of elements that must satisfy the <strong>contains</strong> subschema. It is ignored when <strong>contains</strong> is absent and should be configured alongside <strong>contains</strong>.",
+  maxcontains: "The <strong>maxContains</strong> keyword defines the <strong>maximum</strong> number of elements that may satisfy the <strong>contains</strong> subschema. It is ignored when <strong>contains</strong> is absent and helps bound matching frequency.",
+  unevaluateditems: "The <strong>unevaluatedItems</strong> keyword applies to array elements <strong>not</strong> already evaluated by <strong>prefixItems</strong>, <strong>items</strong>, <strong>contains</strong>, or composed branches. It is valuable for enforcing tight post-composition array contracts.",
+  allof: "The <strong>allOf</strong> keyword requires the instance to satisfy every subschema in the array, equivalent to logical conjunction. It is useful for composing orthogonal constraints into a single effective schema.",
+  anyof: "The <strong>anyOf</strong> keyword requires at least one subschema to validate, equivalent to logical disjunction. It is suitable for permissive alternatives where overlaps are acceptable.",
+  oneof: "The <strong>oneOf</strong> keyword requires exactly one subschema to validate, making it stricter than <strong>anyOf</strong>. It is commonly used for tagged union designs where alternatives should be mutually exclusive.",
+  not: "The <strong>not</strong> keyword inverts validation for its subschema and passes only when the subschema fails. It is useful for exclusion constraints and disallowing problematic shapes.",
+  if: "The <strong>if</strong> keyword defines a predicate subschema used to choose conditional branches. Its result controls whether <strong>then</strong> or <strong>else</strong> is evaluated when those keywords are present.",
+  then: "The <strong>then</strong> keyword is applied only when <strong>if</strong> succeeds, allowing additional constraints in the true branch. It is often paired with discriminators and property dependencies.",
+  else: "The <strong>else</strong> keyword is applied only when <strong>if</strong> fails, providing alternate constraints for the false branch. Together with <strong>if</strong>/<strong>then</strong>, it forms full conditional validation flow in a single schema node."
+};
+
+const FIELD_HELP_LINKS: Record<string, string> = {
+  "$id": "https://json-schema.org/draft/2020-12/json-schema-core.html#name-the-id-keyword",
+  "$schema": "https://json-schema.org/draft/2020-12/json-schema-core.html#name-the-schema-keyword",
+  "$ref": "https://json-schema.org/draft/2020-12/json-schema-core.html#name-the-ref-keyword",
+  type: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-type",
+  title: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-title",
+  description: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-description",
+  deprecated: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-deprecated",
+  readonly: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-readonly",
+  writeonly: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-writeonly",
+  examples: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-examples",
+  default: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-default",
+  const: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-const",
+  enum: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-enum",
+  minlength: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-minlength",
+  maxlength: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-maxlength",
+  pattern: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-pattern",
+  format: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-format",
+  minimum: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-minimum",
+  maximum: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-maximum",
+  multipleof: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-multipleof",
+  exclusiveminimum: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-exclusiveminimum",
+  exclusivemaximum: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-exclusivemaximum",
+  properties: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-properties",
+  required: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-required",
+  additionalproperties: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-additionalproperties",
+  unevaluatedproperties: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-unevaluatedproperties",
+  propertynames: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-propertynames",
+  minproperties: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-minproperties",
+  maxproperties: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-maxproperties",
+  dependentrequired: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-dependentrequired",
+  dependentschemas: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-dependentschemas",
+  patternproperties: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-patternproperties",
+  items: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-items",
+  prefixitems: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-prefixitems",
+  minitems: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-minitems",
+  maxitems: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-maxitems",
+  uniqueitems: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-uniqueitems",
+  contains: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-contains",
+  mincontains: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-mincontains",
+  maxcontains: "https://json-schema.org/draft/2020-12/json-schema-validation.html#name-maxcontains",
+  unevaluateditems: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-unevaluateditems",
+  allof: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-allof",
+  anyof: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-anyof",
+  oneof: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-oneof",
+  not: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-not",
+  if: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-if",
+  then: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-then",
+  else: "https://json-schema.org/draft/2020-12/json-schema-core.html#name-else"
+};
+
+const DEFAULT_HELP_LINK = "https://json-schema.org/draft/2020-12/";
+
+const FIELD_HELP_CONTENT: Record<string, KeywordHelpDefinition> = Object.fromEntries(
+  Object.entries(FIELD_HELP_BASE_CONTENT).map(([key, value]) => [
+    key,
+    {
+      ...value,
+      longDetails:
+        FIELD_HELP_LONG_DETAILS[key] ??
+        "This keyword participates in JSON Schema 2020-12 evaluation and should be configured according to the intended assertion and annotation behavior.",
+      link: FIELD_HELP_LINKS[key] ?? DEFAULT_HELP_LINK
+    }
+  ])
+) as Record<string, KeywordHelpDefinition>;
+
+function normalizeHelpKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\(.*?\)/g, "")
+    .replace(/\s+/g, "")
+    .replace(/[^$a-z0-9]/g, "");
+}
+
+function resolveHelpDefinition(keywordOrLabel: string): KeywordHelpDefinition {
+  const normalized = normalizeHelpKey(keywordOrLabel);
+
+  if (normalized === "types") {
+    return FIELD_HELP_CONTENT.type;
+  }
+
+  if (normalized === "min") {
+    return FIELD_HELP_CONTENT.minimum;
+  }
+
+  if (normalized === "max") {
+    return FIELD_HELP_CONTENT.maximum;
+  }
+
+  const direct = FIELD_HELP_CONTENT[normalized];
+  if (direct) {
+    return direct;
+  }
+
+  return {
+    summary: "Defines behavior for this schema field.",
+    details:
+      "This control edits a JSON Schema keyword or related configuration for the current node. Set a value here to shape validation and annotations.",
+    longDetails:
+      "For exact semantics, check the draft 2020-12 specification section for this keyword and confirm whether your validator treats it as an assertion, annotation, or applicator.",
+    link: DEFAULT_HELP_LINK
+  };
+}
+
 export function SchemaBuilder({ schema, domain, onChange }: SchemaBuilderProps) {
   const [currentSchema, setCurrentSchema] = useState<JSONSchema>(() => schema ?? createDefaultRootSchema());
   const [rawJson, setRawJson] = useState(() => JSON.stringify(schema ?? createDefaultRootSchema(), null, 2));
   const [rawJsonError, setRawJsonError] = useState<string | null>(null);
+  const [activeHelp, setActiveHelp] = useState<ActiveFieldHelp | null>(null);
   const onChangeRef = useRef(onChange);
   const publishedSchema = useMemo(() => {
     const sanitized = sanitizeSchemaForOutput(currentSchema);
@@ -40,32 +462,55 @@ export function SchemaBuilder({ schema, domain, onChange }: SchemaBuilderProps) 
     setCurrentSchema(nextSchema);
   };
 
+  const openHelp = useCallback((key: string, label: string, anchor: HelpAnchorRect) => {
+    setActiveHelp({ key, label, anchor });
+  }, []);
+
+  const closeHelp = useCallback(() => {
+    setActiveHelp(null);
+  }, []);
+
   const prettySchema = useMemo(() => JSON.stringify(publishedSchema, null, 2), [publishedSchema]);
 
   return (
-    <div className="raf-schema-builder">
-      <SchemaNodeEditor
-        schema={currentSchema}
-        label="Root Schema"
-        isRoot={true}
-        domain={domain}
-        onChange={handleRootChange}
-      />
+    <FieldHelpContext.Provider value={{ openHelp }}>
+      <div className="raf-schema-builder">
+        <SchemaNodeEditor
+          schema={currentSchema}
+          label="Root Schema"
+          isRoot={true}
+          domain={domain}
+          onChange={handleRootChange}
+        />
 
-      <details className="raf-object">
-        <summary className="raf-object-summary">Advanced: Edit Full Schema JSON</summary>
-        <div className="raf-object-content">
-          <textarea
-            className="raf-textarea"
-            value={rawJson}
-            onChange={(event) => {
-              const nextText = event.target.value;
-              setRawJson(nextText);
+        <details className="raf-object">
+          <summary className="raf-object-summary">Advanced: Edit Full Schema JSON</summary>
+          <div className="raf-object-content">
+            <textarea
+              className="raf-textarea"
+              value={rawJson}
+              onChange={(event) => {
+                const nextText = event.target.value;
+                setRawJson(nextText);
 
-              try {
-                const parsed = JSON.parse(nextText) as JSONSchema;
-                if (!isObject(parsed)) {
-                  const message = "Schema JSON must be an object.";
+                try {
+                  const parsed = JSON.parse(nextText) as JSONSchema;
+                  if (!isObject(parsed)) {
+                    const message = "Schema JSON must be an object.";
+                    setRawJsonError(message);
+                    onChangeRef.current?.(publishedSchema, [
+                      {
+                        message,
+                        source: "json-parse"
+                      }
+                    ]);
+                    return;
+                  }
+
+                  setRawJsonError(null);
+                  setCurrentSchema(parsed);
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : "Invalid JSON.";
                   setRawJsonError(message);
                   onChangeRef.current?.(publishedSchema, [
                     {
@@ -73,34 +518,23 @@ export function SchemaBuilder({ schema, domain, onChange }: SchemaBuilderProps) 
                       source: "json-parse"
                     }
                   ]);
-                  return;
                 }
+              }}
+            />
+            {rawJsonError ? <div className="raf-error">{rawJsonError}</div> : null}
+          </div>
+        </details>
 
-                setRawJsonError(null);
-                setCurrentSchema(parsed);
-              } catch (error) {
-                const message = error instanceof Error ? error.message : "Invalid JSON.";
-                setRawJsonError(message);
-                onChangeRef.current?.(publishedSchema, [
-                  {
-                    message,
-                    source: "json-parse"
-                  }
-                ]);
-              }
-            }}
-          />
-          {rawJsonError ? <div className="raf-error">{rawJsonError}</div> : null}
-        </div>
-      </details>
+        <details className="raf-object">
+          <summary className="raf-object-summary">Preview JSON Schema</summary>
+          <div className="raf-object-content">
+            <pre className="raf-json-preview">{prettySchema}</pre>
+          </div>
+        </details>
+      </div>
 
-      <details className="raf-object">
-        <summary className="raf-object-summary">Preview JSON Schema</summary>
-        <div className="raf-object-content">
-          <pre className="raf-json-preview">{prettySchema}</pre>
-        </div>
-      </details>
-    </div>
+      <FieldInfoModal activeHelp={activeHelp} onClose={closeHelp} />
+    </FieldHelpContext.Provider>
   );
 }
 
@@ -129,12 +563,14 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
             <>
               <TextInput
                 label="$id"
+                keyword="$id"
                 value={editableRootId}
                 onChange={(value) => onChange(assignOptionalString(schema, "$id", toLocalId(value, domain)))}
                 helperText={domain ? `Full $id: ${fullRootId || "(empty)"}` : undefined}
               />
               <TextInput
                 label="$schema"
+                keyword="$schema"
                 value={stringOrEmpty(schema.$schema)}
                 onChange={(value) => onChange(assignOptionalString(schema, "$schema", value))}
                 placeholder={DEFAULT_SCHEMA_URI}
@@ -143,11 +579,13 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
           ) : null}
           <TextInput
             label="$ref"
+            keyword="$ref"
             value={stringOrEmpty(schema.$ref)}
             onChange={(value) => onChange(assignOptionalString(schema, "$ref", value))}
           />
           <TextInput
             label="Title"
+            keyword="title"
             value={stringOrEmpty(schema.title)}
             onChange={(value) => onChange(assignOptionalString(schema, "title", value))}
           />
@@ -155,6 +593,7 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
 
         <TextAreaInput
           label="Description"
+          keyword="description"
           value={stringOrEmpty(schema.description)}
           onChange={(value) => onChange(assignOptionalString(schema, "description", value))}
         />
@@ -163,63 +602,55 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
           <h4 className="raf-builder-heading">Meta-data</h4>
 
           <div className="raf-builder-grid">
-            <label className="raf-checkbox-row">
-              <input
-                className="raf-checkbox"
-                type="checkbox"
-                checked={schema.deprecated === true}
-                onChange={(event) => {
-                  const next = cloneSchema(schema);
-                  if (event.target.checked) {
-                    next.deprecated = true;
-                  } else {
-                    delete next.deprecated;
-                  }
-                  onChange(next);
-                }}
-              />
-              <span>deprecated</span>
-            </label>
+            <KeywordCheckbox
+              label="deprecated"
+              keyword="deprecated"
+              checked={schema.deprecated === true}
+              onChange={(checked) => {
+                const next = cloneSchema(schema);
+                if (checked) {
+                  next.deprecated = true;
+                } else {
+                  delete next.deprecated;
+                }
+                onChange(next);
+              }}
+            />
 
-            <label className="raf-checkbox-row">
-              <input
-                className="raf-checkbox"
-                type="checkbox"
-                checked={schema.readOnly === true}
-                onChange={(event) => {
-                  const next = cloneSchema(schema);
-                  if (event.target.checked) {
-                    next.readOnly = true;
-                  } else {
-                    delete next.readOnly;
-                  }
-                  onChange(next);
-                }}
-              />
-              <span>readOnly</span>
-            </label>
+            <KeywordCheckbox
+              label="readOnly"
+              keyword="readOnly"
+              checked={schema.readOnly === true}
+              onChange={(checked) => {
+                const next = cloneSchema(schema);
+                if (checked) {
+                  next.readOnly = true;
+                } else {
+                  delete next.readOnly;
+                }
+                onChange(next);
+              }}
+            />
 
-            <label className="raf-checkbox-row">
-              <input
-                className="raf-checkbox"
-                type="checkbox"
-                checked={schema.writeOnly === true}
-                onChange={(event) => {
-                  const next = cloneSchema(schema);
-                  if (event.target.checked) {
-                    next.writeOnly = true;
-                  } else {
-                    delete next.writeOnly;
-                  }
-                  onChange(next);
-                }}
-              />
-              <span>writeOnly</span>
-            </label>
+            <KeywordCheckbox
+              label="writeOnly"
+              keyword="writeOnly"
+              checked={schema.writeOnly === true}
+              onChange={(checked) => {
+                const next = cloneSchema(schema);
+                if (checked) {
+                  next.writeOnly = true;
+                } else {
+                  delete next.writeOnly;
+                }
+                onChange(next);
+              }}
+            />
           </div>
 
           <JsonTextInput
             label="examples"
+            keyword="examples"
             value={schema.examples}
             placeholder='e.g. ["sample", 1, true]'
             onClear={() => {
@@ -249,6 +680,7 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
           />
           <JsonTextInput
             label="Default (JSON)"
+            keyword="default"
             value={schema.default}
             placeholder='e.g. "abc", 42, true, {"k":"v"}'
             onClear={() => {
@@ -271,6 +703,7 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
             <div className="raf-builder-grid">
               <TextInput
                 label="minLength"
+                keyword="minLength"
                 value={numberOrEmpty(schema.minLength)}
                 onChange={(value) => onChange(assignOptionalInteger(schema, "minLength", value))}
                 type="number"
@@ -279,6 +712,7 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
               />
               <TextInput
                 label="maxLength"
+                keyword="maxLength"
                 value={numberOrEmpty(schema.maxLength)}
                 onChange={(value) => onChange(assignOptionalInteger(schema, "maxLength", value))}
                 type="number"
@@ -288,12 +722,14 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
             </div>
             <TextInput
               label="Pattern"
+              keyword="pattern"
               value={stringOrEmpty(schema.pattern)}
               onChange={(value) => onChange(assignOptionalString(schema, "pattern", value))}
               placeholder="e.g. ^[A-Za-z]+$"
             />
             <TypeaheadInput
               label="format"
+              keyword="format"
               value={stringOrEmpty(schema.format)}
               onChange={(value) => onChange(assignOptionalString(schema, "format", value))}
               options={AJV_SUPPORTED_FORMATS}
@@ -307,6 +743,7 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
             <div className="raf-builder-grid">
               <TextInput
                 label="Min"
+                keyword="minimum"
                 value={numberOrEmpty(schema.minimum)}
                 onChange={(value) => onChange(assignOptionalNumber(schema, "minimum", value))}
                 type="number"
@@ -315,6 +752,7 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
               />
               <TextInput
                 label="Max"
+                keyword="maximum"
                 value={numberOrEmpty(schema.maximum)}
                 onChange={(value) => onChange(assignOptionalNumber(schema, "maximum", value))}
                 type="number"
@@ -325,6 +763,7 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
             <div className="raf-builder-grid">
               <TextInput
                 label="multipleOf"
+                keyword="multipleOf"
                 value={numberOrEmpty(schema.multipleOf)}
                 onChange={(value) => onChange(assignOptionalPositiveNumber(schema, "multipleOf", value))}
                 type="number"
@@ -333,6 +772,7 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
               />
               <TextInput
                 label="exclusiveMinimum"
+                keyword="exclusiveMinimum"
                 value={numberOrEmpty(schema.exclusiveMinimum)}
                 onChange={(value) => onChange(assignOptionalNumber(schema, "exclusiveMinimum", value))}
                 type="number"
@@ -341,6 +781,7 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
               />
               <TextInput
                 label="exclusiveMaximum"
+                keyword="exclusiveMaximum"
                 value={numberOrEmpty(schema.exclusiveMaximum)}
                 onChange={(value) => onChange(assignOptionalNumber(schema, "exclusiveMaximum", value))}
                 type="number"
@@ -393,11 +834,15 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
 
   return (
     <div className="raf-builder-block">
-      <h4 className="raf-builder-heading">Object Properties</h4>
+      <div className="raf-builder-heading-wrap">
+        <h4 className="raf-builder-heading">Object Properties</h4>
+        <FieldLabel label="properties" keyword="properties" />
+      </div>
 
       <div className="raf-builder-grid">
         <TextInput
           label="minProperties"
+          keyword="minProperties"
           value={numberOrEmpty(schema.minProperties)}
           onChange={(value) => onChange(assignOptionalInteger(schema, "minProperties", value))}
           type="number"
@@ -406,6 +851,7 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
         />
         <TextInput
           label="maxProperties"
+          keyword="maxProperties"
           value={numberOrEmpty(schema.maxProperties)}
           onChange={(value) => onChange(assignOptionalInteger(schema, "maxProperties", value))}
           type="number"
@@ -414,122 +860,127 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
         />
       </div>
 
-      <label className="raf-checkbox-row">
-        <input
-          className="raf-checkbox"
-          type="checkbox"
-          checked={additionalPropertiesEnabled}
-          onChange={(event) => {
-            const next = cloneSchema(schema);
+      <KeywordCheckbox
+        label="additionalProperties"
+        keyword="additionalProperties"
+        checked={additionalPropertiesEnabled}
+        onChange={(checked) => {
+          const next = cloneSchema(schema);
 
-            if (event.target.checked) {
-              if (isObject(next.additionalProperties)) {
-                next.additionalProperties = next.additionalProperties as JSONSchema;
-              } else {
-                next.additionalProperties = true;
-              }
+          if (checked) {
+            if (isObject(next.additionalProperties)) {
+              next.additionalProperties = next.additionalProperties as JSONSchema;
             } else {
-              next.additionalProperties = false;
+              next.additionalProperties = true;
             }
+          } else {
+            next.additionalProperties = false;
+          }
 
-            onChange(next);
-          }}
-        />
-        <span>additionalProperties</span>
-      </label>
+          onChange(next);
+        }}
+      />
 
-      <div className="raf-button-row">
-        {!unevaluatedPropertiesSchema ? (
-          <button
-            className="raf-button raf-button-secondary"
-            type="button"
-            onClick={() => {
+      <div className="raf-builder-block">
+        <FieldLabel label="unevaluatedProperties" keyword="unevaluatedProperties" labelType="heading" />
+
+        <div className="raf-button-row">
+          {!unevaluatedPropertiesSchema ? (
+            <button
+              className="raf-button raf-button-secondary"
+              type="button"
+              onClick={() => {
+                const next = cloneSchema(schema);
+                next.unevaluatedProperties = { type: "string" };
+                onChange(next);
+              }}
+            >
+              Add unevaluatedProperties
+            </button>
+          ) : (
+            <button
+              className="raf-button raf-button-danger"
+              type="button"
+              onClick={() => {
+                const next = cloneSchema(schema);
+                delete next.unevaluatedProperties;
+                onChange(next);
+              }}
+            >
+              Clear unevaluatedProperties
+            </button>
+          )}
+        </div>
+
+        {unevaluatedPropertiesSchema ? (
+          <SchemaNodeEditor
+            label="unevaluatedProperties"
+            schema={unevaluatedPropertiesSchema}
+            onChange={(nextUnevaluatedPropertiesSchema) => {
               const next = cloneSchema(schema);
-              next.unevaluatedProperties = { type: "string" };
+              next.unevaluatedProperties = nextUnevaluatedPropertiesSchema;
               onChange(next);
             }}
-          >
-            Add unevaluatedProperties
-          </button>
-        ) : (
-          <button
-            className="raf-button raf-button-danger"
-            type="button"
-            onClick={() => {
+            onRemove={() => {
               const next = cloneSchema(schema);
               delete next.unevaluatedProperties;
               onChange(next);
             }}
-          >
-            Clear unevaluatedProperties
-          </button>
-        )}
+          />
+        ) : null}
       </div>
 
-      {unevaluatedPropertiesSchema ? (
-        <SchemaNodeEditor
-          label="unevaluatedProperties"
-          schema={unevaluatedPropertiesSchema}
-          onChange={(nextUnevaluatedPropertiesSchema) => {
-            const next = cloneSchema(schema);
-            next.unevaluatedProperties = nextUnevaluatedPropertiesSchema;
-            onChange(next);
-          }}
-          onRemove={() => {
-            const next = cloneSchema(schema);
-            delete next.unevaluatedProperties;
-            onChange(next);
-          }}
-        />
-      ) : null}
+      <div className="raf-builder-block">
+        <FieldLabel label="propertyNames" keyword="propertyNames" labelType="heading" />
 
-      <div className="raf-button-row">
-        {!propertyNamesSchema ? (
-          <button
-            className="raf-button raf-button-secondary"
-            type="button"
-            onClick={() => {
+        <div className="raf-button-row">
+          {!propertyNamesSchema ? (
+            <button
+              className="raf-button raf-button-secondary"
+              type="button"
+              onClick={() => {
+                const next = cloneSchema(schema);
+                next.propertyNames = { type: "string" };
+                onChange(next);
+              }}
+            >
+              Add propertyNames
+            </button>
+          ) : (
+            <button
+              className="raf-button raf-button-danger"
+              type="button"
+              onClick={() => {
+                const next = cloneSchema(schema);
+                delete next.propertyNames;
+                onChange(next);
+              }}
+            >
+              Clear propertyNames
+            </button>
+          )}
+        </div>
+
+        {propertyNamesSchema ? (
+          <SchemaNodeEditor
+            label="propertyNames"
+            schema={propertyNamesSchema}
+            onChange={(nextPropertyNamesSchema) => {
               const next = cloneSchema(schema);
-              next.propertyNames = { type: "string" };
+              next.propertyNames = nextPropertyNamesSchema;
               onChange(next);
             }}
-          >
-            Add propertyNames
-          </button>
-        ) : (
-          <button
-            className="raf-button raf-button-danger"
-            type="button"
-            onClick={() => {
+            onRemove={() => {
               const next = cloneSchema(schema);
               delete next.propertyNames;
               onChange(next);
             }}
-          >
-            Clear propertyNames
-          </button>
-        )}
+          />
+        ) : null}
       </div>
 
-      {propertyNamesSchema ? (
-        <SchemaNodeEditor
-          label="propertyNames"
-          schema={propertyNamesSchema}
-          onChange={(nextPropertyNamesSchema) => {
-            const next = cloneSchema(schema);
-            next.propertyNames = nextPropertyNamesSchema;
-            onChange(next);
-          }}
-          onRemove={() => {
-            const next = cloneSchema(schema);
-            delete next.propertyNames;
-            onChange(next);
-          }}
-        />
-      ) : null}
-
       <div className="raf-builder-block">
-        <h4 className="raf-builder-heading">dependentRequired</h4>
+        <FieldLabel label="dependentRequired" keyword="dependentRequired" labelType="heading" />
         <div className="raf-button-row">
           <button
             className="raf-button raf-button-secondary"
@@ -555,6 +1006,7 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
               <div className="raf-builder-grid">
                 <TextInput
                   label="Dependent Property"
+                  keyword="dependentRequired"
                   value={propertyName}
                   onChange={(nextName) => {
                     const normalized = nextName.trim();
@@ -585,6 +1037,7 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
                 />
                 <TextInput
                   label="Required Properties (comma-separated)"
+                  keyword="dependentRequired"
                   value={serializedDependencies}
                   onChange={(nextValue) => {
                     const next = cloneSchema(schema);
@@ -662,6 +1115,7 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
           <div className="raf-builder-grid">
             <TextInput
               label="Property Name"
+              keyword="properties"
               value={propertyName}
               onChange={(nextName) => {
                 const normalized = nextName.trim();
@@ -703,27 +1157,24 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
               }}
             />
 
-            <label className="raf-checkbox-row">
-              <input
-                className="raf-checkbox"
-                type="checkbox"
-                checked={requiredSet.has(propertyName)}
-                onChange={(event) => {
-                  const next = cloneSchema(schema);
-                  const required = new Set(next.required ?? []);
+            <KeywordCheckbox
+              label="Required"
+              keyword="required"
+              checked={requiredSet.has(propertyName)}
+              onChange={(checked) => {
+                const next = cloneSchema(schema);
+                const required = new Set(next.required ?? []);
 
-                  if (event.target.checked) {
-                    required.add(propertyName);
-                  } else {
-                    required.delete(propertyName);
-                  }
+                if (checked) {
+                  required.add(propertyName);
+                } else {
+                  required.delete(propertyName);
+                }
 
-                  next.required = Array.from(required);
-                  onChange(next);
-                }}
-              />
-              <span>Required</span>
-            </label>
+                next.required = Array.from(required);
+                onChange(next);
+              }}
+            />
           </div>
 
           <SchemaNodeEditor
@@ -766,6 +1217,7 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
       {tupleItems ? (
         <>
           <h4 className="raf-builder-heading">Array Items (Tuple)</h4>
+          <FieldLabel label="prefixItems" keyword="prefixItems" />
           <div className="raf-button-row">
             <button
               className="raf-button raf-button-primary"
@@ -837,6 +1289,7 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
       ) : (
         <>
           <h4 className="raf-builder-heading">Array Items</h4>
+          <FieldLabel label="items" keyword="items" />
 
           <SchemaNodeEditor
             label="Items Schema"
@@ -870,6 +1323,7 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
       <div className="raf-builder-grid">
         <TextInput
           label="minItems"
+          keyword="minItems"
           value={numberOrEmpty(schema.minItems)}
           onChange={(value) => onChange(assignOptionalInteger(schema, "minItems", value))}
           type="number"
@@ -878,6 +1332,7 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
         />
         <TextInput
           label="maxItems"
+          keyword="maxItems"
           value={numberOrEmpty(schema.maxItems)}
           onChange={(value) => onChange(assignOptionalInteger(schema, "maxItems", value))}
           type="number"
@@ -886,23 +1341,20 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
         />
       </div>
 
-      <label className="raf-checkbox-row">
-        <input
-          className="raf-checkbox"
-          type="checkbox"
-          checked={Boolean(schema.uniqueItems)}
-          onChange={(event) => {
-            const next = cloneSchema(schema);
-            if (event.target.checked) {
-              next.uniqueItems = true;
-            } else {
-              delete next.uniqueItems;
-            }
-            onChange(next);
-          }}
-        />
-        <span>uniqueItems</span>
-      </label>
+      <KeywordCheckbox
+        label="uniqueItems"
+        keyword="uniqueItems"
+        checked={Boolean(schema.uniqueItems)}
+        onChange={(checked) => {
+          const next = cloneSchema(schema);
+          if (checked) {
+            next.uniqueItems = true;
+          } else {
+            delete next.uniqueItems;
+          }
+          onChange(next);
+        }}
+      />
 
       <div className="raf-button-row">
         {!hasContains ? (
@@ -949,6 +1401,7 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
           <div className="raf-builder-grid">
             <TextInput
               label="minContains"
+              keyword="minContains"
               value={numberOrEmpty(schema.minContains)}
               onChange={(value) => onChange(assignOptionalInteger(schema, "minContains", value))}
               type="number"
@@ -957,6 +1410,7 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
             />
             <TextInput
               label="maxContains"
+              keyword="maxContains"
               value={numberOrEmpty(schema.maxContains)}
               onChange={(value) => onChange(assignOptionalInteger(schema, "maxContains", value))}
               type="number"
@@ -1028,7 +1482,7 @@ function CombinationEditor({
 
   return (
     <div className="raf-builder-block">
-      <h4 className="raf-builder-heading">{kind}</h4>
+      <FieldLabel label={kind} keyword={kind} labelType="heading" />
 
       <div className="raf-button-row">
         <button
@@ -1097,7 +1551,7 @@ function ConditionalSchemaEditor({
 
   return (
     <div className="raf-builder-block">
-      <h4 className="raf-builder-heading">{kind}</h4>
+      <FieldLabel label={kind} keyword={kind} labelType="heading" />
 
       <div className="raf-button-row">
         {!entry ? (
@@ -1160,7 +1614,7 @@ function SingleSchemaEditor({
 
   return (
     <div className="raf-builder-block">
-      <h4 className="raf-builder-heading">{kind}</h4>
+      <FieldLabel label={kind} keyword={kind} labelType="heading" />
 
       <div className="raf-button-row">
         {!entry ? (
@@ -1227,7 +1681,7 @@ function SchemaMapEditor({
 }) {
   return (
     <div className="raf-builder-block">
-      <h4 className="raf-builder-heading">{title}</h4>
+      <FieldLabel label={title} keyword={title} labelType="heading" />
 
       <div className="raf-button-row">
         <button
@@ -1249,6 +1703,7 @@ function SchemaMapEditor({
           <div className="raf-builder-grid">
             <TextInput
               label={`${title} Key`}
+              keyword={title}
               value={entryName}
               onChange={(nextName) => {
                 const normalized = nextName.trim();
@@ -1312,14 +1767,13 @@ function TypeListEditor({
 
   return (
     <div className="raf-field">
-      <div className="raf-field-label-row">
-        <span className="raf-field-label">Types</span>
-      </div>
+      <FieldLabel label="Types" keyword="type" />
 
       {value.map((type, index) => (
         <div className="raf-button-row" key={`type-${index}`}>
           <select
             className="raf-select raf-builder-control"
+            aria-label={`Type ${index + 1}`}
             value={type}
             onChange={(event) => {
               const nextType = event.target.value as JSONSchemaType;
@@ -1374,8 +1828,199 @@ function TypeListEditor({
   );
 }
 
+function useFieldHelp() {
+  return useContext(FieldHelpContext);
+}
+
+function FieldLabel({
+  label,
+  keyword,
+  labelType = "standard"
+}: {
+  label: string;
+  keyword?: string;
+  labelType?: "standard" | "heading";
+}) {
+  const fieldHelp = useFieldHelp();
+  const helpKey = keyword ?? label;
+  const help = resolveHelpDefinition(helpKey);
+
+  return (
+    <>
+      <div className="raf-field-label-row">
+        {labelType === "heading" ? <h4 className="raf-builder-heading">{label}</h4> : <span className="raf-field-label">{label}</span>}
+        <button
+          className="raf-info-button"
+          type="button"
+          aria-label={`Info about ${label}`}
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            fieldHelp?.openHelp(helpKey, label, {
+              top: rect.top,
+              left: rect.left,
+              bottom: rect.bottom,
+              right: rect.right
+            });
+          }}
+        >
+          <span className="raf-info-icon" aria-hidden="true">
+            i
+          </span>
+          <span className="raf-sr-only">Info</span>
+        </button>
+      </div>
+      <div className="raf-field-summary">{help.summary}</div>
+    </>
+  );
+}
+
+function KeywordCheckbox({
+  label,
+  keyword,
+  checked,
+  onChange
+}: {
+  label: string;
+  keyword: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="raf-field">
+      <FieldLabel label={label} keyword={keyword} />
+      <label className="raf-checkbox-row">
+        <input
+          className="raf-checkbox"
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        <span>{label}</span>
+      </label>
+    </div>
+  );
+}
+
+function FieldInfoModal({
+  activeHelp,
+  onClose
+}: {
+  activeHelp: ActiveFieldHelp | null;
+  onClose: () => void;
+}) {
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const [desktopPosition, setDesktopPosition] = useState<{ top: number; left: number } | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!activeHelp) {
+      return;
+    }
+
+    const updatePosition = () => {
+      const mobile = window.innerWidth <= 760;
+      setIsMobile(mobile);
+
+      if (mobile) {
+        setDesktopPosition(null);
+        return;
+      }
+
+      const modalMaxWidth = Math.min(480, window.innerWidth - 24);
+      const modalMaxHeight = Math.floor(window.innerHeight * 0.38);
+      const desiredLeft = activeHelp.anchor.left;
+      const desiredTop = activeHelp.anchor.bottom + 8;
+      const left = Math.max(12, Math.min(desiredLeft, window.innerWidth - modalMaxWidth - 12));
+      const top = Math.max(12, Math.min(desiredTop, window.innerHeight - modalMaxHeight - 12));
+
+      setDesktopPosition({ top, left });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [activeHelp]);
+
+  useEffect(() => {
+    if (!activeHelp) {
+      return;
+    }
+
+    const closeIfOutside = (event: Event) => {
+      const target = event.target;
+      if (!target || !(target instanceof Node)) {
+        return;
+      }
+
+      if (modalRef.current?.contains(target)) {
+        return;
+      }
+
+      onClose();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("mousedown", closeIfOutside, true);
+    document.addEventListener("touchstart", closeIfOutside, true);
+    document.addEventListener("wheel", closeIfOutside, true);
+    document.addEventListener("scroll", closeIfOutside, true);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", closeIfOutside, true);
+      document.removeEventListener("touchstart", closeIfOutside, true);
+      document.removeEventListener("wheel", closeIfOutside, true);
+      document.removeEventListener("scroll", closeIfOutside, true);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeHelp, onClose]);
+
+  if (!activeHelp) {
+    return null;
+  }
+
+  const help = resolveHelpDefinition(activeHelp.key);
+
+  return (
+    <div className="raf-info-layer" role="presentation" onMouseDown={onClose}>
+      <div
+        ref={modalRef}
+        className={`raf-info-modal${isMobile ? " raf-info-modal-mobile" : ""}`}
+        style={!isMobile && desktopPosition ? { top: `${desktopPosition.top}px`, left: `${desktopPosition.left}px` } : undefined}
+        role="dialog"
+        aria-modal="false"
+        aria-label={`${activeHelp.label} information`}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="raf-info-modal-header">
+          <strong>{activeHelp.label}</strong>
+          <button className="raf-button raf-button-secondary" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="raf-info-modal-body">
+          <a className="raf-info-link" href={help.link} target="_blank" rel="noreferrer">
+            View {activeHelp.label} in JSON Schema 2020-12
+          </a>
+          <p>{parse(help.details)}</p>
+          <p>{parse(help.longDetails)}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TextInput({
   label,
+  keyword,
   value,
   onChange,
   placeholder,
@@ -1384,6 +2029,7 @@ function TextInput({
   step
 }: {
   label: string;
+  keyword?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -1393,12 +2039,11 @@ function TextInput({
 }) {
   return (
     <label className="raf-field">
-      <div className="raf-field-label-row">
-        <span className="raf-field-label">{label}</span>
-      </div>
+      <FieldLabel label={label} keyword={keyword} />
       <input
         className="raf-input raf-builder-control"
         type={type}
+        aria-label={label}
         value={value}
         placeholder={placeholder}
         step={step}
@@ -1411,12 +2056,14 @@ function TextInput({
 
 function TypeaheadInput({
   label,
+  keyword,
   value,
   onChange,
   options,
   placeholder
 }: {
   label: string;
+  keyword?: string;
   value: string;
   onChange: (value: string) => void;
   options: readonly string[];
@@ -1446,12 +2093,11 @@ function TypeaheadInput({
 
   return (
     <label className="raf-field raf-typeahead" ref={containerRef}>
-      <div className="raf-field-label-row">
-        <span className="raf-field-label">{label}</span>
-      </div>
+      <FieldLabel label={label} keyword={keyword} />
       <input
         className="raf-input raf-builder-control"
         type="text"
+        aria-label={label}
         value={value}
         placeholder={placeholder}
         onFocus={() => setIsOpen(true)}
@@ -1485,14 +2131,23 @@ function TypeaheadInput({
   );
 }
 
-function TextAreaInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function TextAreaInput({
+  label,
+  keyword,
+  value,
+  onChange
+}: {
+  label: string;
+  keyword?: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   return (
     <label className="raf-field">
-      <div className="raf-field-label-row">
-        <span className="raf-field-label">{label}</span>
-      </div>
+      <FieldLabel label={label} keyword={keyword} />
       <textarea
         className="raf-textarea raf-builder-control"
+        aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -1502,6 +2157,7 @@ function TextAreaInput({ label, value, onChange }: { label: string; value: strin
 
 function JsonTextInput({
   label,
+  keyword,
   value,
   onValidJson,
   onClear,
@@ -1510,6 +2166,7 @@ function JsonTextInput({
   placeholder
 }: {
   label: string;
+  keyword?: string;
   value: unknown;
   onValidJson: (parsed: unknown) => void;
   onClear: () => void;
@@ -1532,6 +2189,7 @@ function JsonTextInput({
   return (
     <TextInput
       label={label}
+      keyword={keyword}
       value={draftValue}
       onChange={(nextText) => {
         setDraftValue(nextText);
@@ -1575,11 +2233,10 @@ function ConstEditor({
 
     return (
       <label className="raf-field">
-        <div className="raf-field-label-row">
-          <span className="raf-field-label">Const</span>
-        </div>
+        <FieldLabel label="Const" keyword="const" />
         <select
           className="raf-select raf-builder-control"
+          aria-label="Const"
           value={selectedIndex >= 0 ? String(selectedIndex) : ""}
           onChange={(event) => {
             const indexValue = event.target.value;
@@ -1613,19 +2270,16 @@ function ConstEditor({
 
   if (primaryType === "boolean") {
     return (
-      <label className="raf-checkbox-row">
-        <input
-          className="raf-checkbox"
-          type="checkbox"
-          checked={schema.const === true}
-          onChange={(event) => {
-            const next = cloneSchema(schema);
-            next.const = event.target.checked;
-            onChange(next);
-          }}
-        />
-        <span>Const</span>
-      </label>
+      <KeywordCheckbox
+        label="Const"
+        keyword="const"
+        checked={schema.const === true}
+        onChange={(checked) => {
+          const next = cloneSchema(schema);
+          next.const = checked;
+          onChange(next);
+        }}
+      />
     );
   }
 
@@ -1633,6 +2287,7 @@ function ConstEditor({
     return (
       <TextInput
         label="Const"
+        keyword="const"
         type="number"
         step={primaryType === "integer" ? "1" : "any"}
         value={typeof schema.const === "number" ? String(schema.const) : ""}
@@ -1666,6 +2321,7 @@ function ConstEditor({
     return (
       <TextInput
         label="Const"
+        keyword="const"
         type="text"
         value={typeof schema.const === "string" ? schema.const : ""}
         placeholder="e.g. fixed-value"
@@ -1686,6 +2342,7 @@ function ConstEditor({
     return (
       <JsonTextInput
         label="Const"
+        keyword="const"
         value={schema.const}
         stringValueDisplay="raw"
         placeholder="e.g. A, 2, true, null"
@@ -1716,6 +2373,7 @@ function ConstEditor({
   return (
     <JsonTextInput
       label="Const (JSON)"
+      keyword="const"
       value={schema.const}
       placeholder='e.g. "fixed-value", 3, true, null, {"k":"v"}'
       onClear={() => {
@@ -1835,6 +2493,7 @@ function NumberEnumInput({
   return (
     <TextInput
       label="Enum"
+      keyword="enum"
       value={draftValue}
       placeholder={integerOnly ? "e.g. [1, 2, 3]" : "e.g. [1, 2.5, 3]"}
       onChange={(nextText) => {
@@ -1923,6 +2582,7 @@ function StringEnumInput({
   return (
     <TextInput
       label="Enum"
+      keyword="enum"
       type="text"
       value={draftValue}
       placeholder={`e.g. A, B, "C, D", 'E, F'`}
