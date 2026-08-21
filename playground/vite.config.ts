@@ -18,6 +18,7 @@ export default defineConfig({
       ajv: path.resolve(playgroundNodeModules, "ajv"),
       "ajv/dist/2019": path.resolve(playgroundNodeModules, "ajv/dist/2019.js"),
       "ajv/dist/2020": path.resolve(playgroundNodeModules, "ajv/dist/2020.js"),
+      "html-react-parser": path.resolve(playgroundNodeModules, "html-react-parser"),
       "json-pointer-relational": path.resolve(playgroundNodeModules, "json-pointer-relational")
     }
   }

@@ -13,6 +13,7 @@
   "dependencies": {
     "@hyperjump/json-schema": "^1.17.8",
     "ajv": "^8.17.1",
+    "html-react-parser": "^5.2.7",
     "json-pointer-relational": "^1.0.5",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
