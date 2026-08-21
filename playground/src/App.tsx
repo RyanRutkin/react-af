@@ -269,6 +269,14 @@ export default function App() {
       <header className="play-header">
         <h1>React AF Playground</h1>
         <p>Interactive environment for testing SchemaForm behavior and previewing SchemaBuilder export.</p>
+        <div className="play-header-guides" aria-label="Documentation guides">
+          <a href="/react-af/react-json-schema-form-refs" className="play-header-guide-link">
+            Guide: React JSON Schema Form Refs
+          </a>
+          <a href="/react-af/draft-2020-12-form-builder" className="play-header-guide-link">
+            Guide: Draft 2020-12 Form Builder
+          </a>
+        </div>
         <div className="play-showcase-toggle" aria-label="Playground showcase mode">
           <button
             type="button"

@@ -62,6 +62,9 @@ jobs:
         working-directory: playground
         run: npm install
 
+      - name: Generate sitemap
+        run: node scripts/generate-playground-sitemap.mjs
+
       - name: Run playground tests
         working-directory: playground
         run: npm test

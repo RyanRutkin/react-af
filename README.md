@@ -19,6 +19,24 @@ react-af exists to be both:
 
 In short: this is built to be the most robust and still easy-to-use JSON Schema form library available for React.
 
+## Comparison Snapshot
+
+The goal here is not drama. The goal is practical capability when schemas stop being toy examples.
+
+| Capability | react-af | Typical basic JSON Schema form setup |
+| --- | --- | --- |
+| Visual schema authoring | Yes (`SchemaBuilder`) | Usually no built-in builder |
+| Schema + form side-by-side workflow | Yes | Usually custom integration |
+| Async missing `$ref` loading | Yes (`getSchema`) | Often limited or app-specific |
+| Peer schema document support | Yes | Varies |
+| Draft 2020-12 oriented workflows | Yes | Varies by implementation |
+| Advanced keywords (`if/then/else`, `dependentSchemas`, `unevaluated*`) | Designed for this | Often partial |
+| Widget overrides by pointer and type | Yes | Usually type-only or custom plumbing |
+| Defaults strategy control | Yes (`all` / `required-only`) | Often limited |
+| Validation feedback on every change | Yes | Usually yes |
+
+If your form requirements include deep JSON Schema support and your timeline includes "this quarter," this matrix is the point.
+
 ## Installation
 
 If you're already rolling with stuff, this should do it:
@@ -465,3 +483,28 @@ The repository includes a full playground under `playground` for interactive sch
 ```bash
 npm run playground:dev
 ```
+
+## Discoverability Quick Guide
+
+If you found this package while searching for any of the following, you are exactly in the right place:
+
+- React JSON Schema form
+- JSON Schema builder for React
+- JSON Schema draft 2020-12 React support
+- React form library with strong `$ref` resolution
+- Schema-driven forms with practical defaults handling
+
+### Relevant Links
+
+- GitHub repository: https://github.com/RyanRutkin/react-af
+- npm package: https://www.npmjs.com/package/@ryanrutkin/react-af
+- Live playground and docs landing page: https://ryanrutkin.github.io/react-af/
+- React JSON Schema Form Refs guide: https://ryanrutkin.github.io/react-af/react-json-schema-form-refs
+- Draft 2020-12 Form Builder guide: https://ryanrutkin.github.io/react-af/draft-2020-12-form-builder
+
+### Why teams switch to react-af
+
+- Better support for advanced JSON Schema constructs than typical basic form generators.
+- More reliable behavior when schema complexity grows.
+- Better defaults handling in real application flows.
+- A visual schema builder that does not require giving up power-user control.

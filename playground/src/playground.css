@@ -34,6 +34,31 @@ body {
   opacity: 0.95;
 }
 
+.play-header-guides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-top: 0.875rem;
+}
+
+.play-header-guide-link {
+  color: #dbeafe;
+  text-decoration: none;
+  border: 0.0625rem solid rgba(219, 234, 254, 0.55);
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.625rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+  background: rgba(15, 23, 42, 0.18);
+}
+
+.play-header-guide-link:hover,
+.play-header-guide-link:focus {
+  color: #ffffff;
+  border-color: #ffffff;
+  background: rgba(15, 23, 42, 0.28);
+}
+
 .play-showcase-toggle {
   display: inline-flex;
   gap: 0.625rem;
