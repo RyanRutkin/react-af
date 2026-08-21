@@ -1,6 +1,7 @@
 import { Component, type ReactNode, useMemo, useState } from "react";
 import {
   SchemaBuilder,
+  SchemaBuilderHelper,
   SchemaForm,
   type JSONSchema,
   type OutputData,
@@ -43,6 +44,7 @@ export default function App() {
   const [showcaseMode, setShowcaseMode] = useState<"form" | "builder">("form");
   const [builderSchema, setBuilderSchema] = useState<JSONSchema | null>(null);
   const [builderResultMode, setBuilderResultMode] = useState<"form" | "json">("form");
+  const [builderSidebarView, setBuilderSidebarView] = useState<"result" | "assistant">("result");
   const [builderPreviewData, setBuilderPreviewData] = useState<OutputData | undefined>(undefined);
   const [builderPreviewErrors, setBuilderPreviewErrors] = useState<SchemaFormValidationError[]>([]);
   const [formValidationErrors, setFormValidationErrors] = useState<SchemaFormValidationError[]>([]);
@@ -159,7 +161,7 @@ export default function App() {
           </>
         ) : (
           <>
-            <section className="play-panel">
+            <section className="play-panel play-builder-main">
               <h2>SchemaBuilder</h2>
               <SchemaBuilder
                 onChange={(nextSchema: JSONSchema, validationErrors: SchemaBuilderValidationError[]) => {
@@ -169,51 +171,83 @@ export default function App() {
                 domain="https://ryanrutkin.github.io/react-af/playground/example/"
               />
               <ValidationErrorList title="SchemaBuilder Validation Errors" errors={builderValidationErrors} />
-              <p className="play-note">SchemaBuilder details are pending and can be added in the next prompt.</p>
             </section>
 
-            <section className="play-panel">
-              <h2>SchemaBuilder Result</h2>
-              <div className="play-event">Live schema emitted from SchemaBuilder onChange.</div>
-              <div className="play-toggle-row">
-                <button
-                  type="button"
-                  className={`play-toggle-button ${builderResultMode === "form" ? "play-toggle-button-active" : ""}`}
-                  onClick={() => setBuilderResultMode("form")}
-                >
-                  Form
-                </button>
-                <button
-                  type="button"
-                  className={`play-toggle-button ${builderResultMode === "json" ? "play-toggle-button-active" : ""}`}
-                  onClick={() => setBuilderResultMode("json")}
-                >
-                  JSON
-                </button>
+            <section className="play-panel play-builder-sidebar">
+              <div className="play-builder-sidebar-header">
+                <div className="play-toggle-row" aria-label="SchemaBuilder side panel view">
+                  <button
+                    type="button"
+                    className={`play-toggle-button ${builderSidebarView === "result" ? "play-toggle-button-active" : ""}`}
+                    onClick={() => setBuilderSidebarView("result")}
+                  >
+                    SchemaBuilder Result
+                  </button>
+                  <button
+                    type="button"
+                    className={`play-toggle-button ${builderSidebarView === "assistant" ? "play-toggle-button-active" : ""}`}
+                    onClick={() => setBuilderSidebarView("assistant")}
+                  >
+                    Keyword Assistant
+                  </button>
+                </div>
               </div>
 
-              {builderResultMode === "form" ? (
-                builderSchema ? (
-                  <FormErrorBoundary>
-                    <SchemaForm
-                      schema={builderSchema}
-                      data={builderPreviewData}
-                      onChange={(nextData: OutputData, validationErrors: SchemaFormValidationError[]) => {
-                        setBuilderPreviewErrors(validationErrors);
-                        setBuilderPreviewData(nextData);
-                      }}
-                    />
-                  </FormErrorBoundary>
-                ) : (
-                  <div className="play-error">No schema changes yet.</div>
-                )
-              ) : (
-                <pre className="play-json">{builderSchema ? JSON.stringify(builderSchema, null, 2) : "No schema changes yet."}</pre>
-              )}
+              <div className="play-builder-sidebar-panels">
+                <section
+                  className={`play-builder-sidecard play-builder-sidecard-result ${builderSidebarView === "result" ? "play-builder-sidecard-active" : "play-builder-sidecard-hidden"}`}
+                  aria-hidden={builderSidebarView !== "result"}
+                >
+                  <h3>SchemaBuilder Result</h3>
+                  <div className="play-event">Live schema emitted from SchemaBuilder onChange.</div>
+                  <div className="play-toggle-row">
+                    <button
+                      type="button"
+                      className={`play-toggle-button ${builderResultMode === "form" ? "play-toggle-button-active" : ""}`}
+                      onClick={() => setBuilderResultMode("form")}
+                    >
+                      Form
+                    </button>
+                    <button
+                      type="button"
+                      className={`play-toggle-button ${builderResultMode === "json" ? "play-toggle-button-active" : ""}`}
+                      onClick={() => setBuilderResultMode("json")}
+                    >
+                      JSON
+                    </button>
+                  </div>
 
-              {builderResultMode === "form" ? (
-                <ValidationErrorList title="Result Form Validation Errors" errors={builderPreviewErrors} />
-              ) : null}
+                  {builderResultMode === "form" ? (
+                    builderSchema ? (
+                      <FormErrorBoundary>
+                        <SchemaForm
+                          schema={builderSchema}
+                          data={builderPreviewData}
+                          onChange={(nextData: OutputData, validationErrors: SchemaFormValidationError[]) => {
+                            setBuilderPreviewErrors(validationErrors);
+                            setBuilderPreviewData(nextData);
+                          }}
+                        />
+                      </FormErrorBoundary>
+                    ) : (
+                      <div className="play-error">No schema changes yet.</div>
+                    )
+                  ) : (
+                    <pre className="play-json">{builderSchema ? JSON.stringify(builderSchema, null, 2) : "No schema changes yet."}</pre>
+                  )}
+
+                  {builderResultMode === "form" ? (
+                    <ValidationErrorList title="Result Form Validation Errors" errors={builderPreviewErrors} />
+                  ) : null}
+                </section>
+
+                <section
+                  className={`play-builder-sidecard play-builder-sidecard-assistant ${builderSidebarView === "assistant" ? "play-builder-sidecard-active" : "play-builder-sidecard-hidden"}`}
+                  aria-hidden={builderSidebarView !== "assistant"}
+                >
+                  <SchemaBuilderHelper />
+                </section>
+              </div>
             </section>
           </>
         )}

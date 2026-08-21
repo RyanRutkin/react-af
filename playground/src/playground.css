@@ -165,6 +165,7 @@ body {
   display: inline-flex;
   gap: 8px;
   margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
 .play-toggle-button {
@@ -182,6 +183,61 @@ body {
   background: #0d5ea8;
   color: #ffffff;
   border-color: #0d5ea8;
+}
+
+.play-builder-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.play-builder-sidebar-header {
+  display: grid;
+  gap: 10px;
+}
+
+.play-builder-sidebar-header h2,
+.play-builder-sidecard h3 {
+  margin: 0;
+}
+
+.play-builder-sidebar-panels {
+  position: relative;
+  min-height: 520px;
+}
+
+.play-builder-sidecard {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 220ms ease, opacity 220ms ease, visibility 220ms ease;
+  will-change: transform, opacity;
+}
+
+.play-builder-sidecard-result {
+  transform-origin: left center;
+}
+
+.play-builder-sidecard-assistant {
+  transform-origin: right center;
+}
+
+.play-builder-sidecard-active {
+  opacity: 1;
+  visibility: visible;
+  transform: scaleX(1);
+  pointer-events: auto;
+}
+
+.play-builder-sidecard-hidden {
+  opacity: 0;
+  visibility: hidden;
+  transform: scaleX(0);
+  pointer-events: none;
 }
 
 @media (min-width: 960px) {
@@ -203,5 +259,26 @@ body {
 
   .play-input-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .play-builder-main {
+    grid-column: span 6;
+  }
+
+  .play-builder-sidebar {
+    grid-column: span 6;
+    position: sticky;
+    top: 12px;
+    align-self: start;
+  }
+}
+
+@media (max-width: 959px) {
+  .play-builder-sidebar {
+    position: static;
+  }
+
+  .play-builder-sidebar-panels {
+    min-height: 460px;
   }
 }

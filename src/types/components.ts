@@ -69,6 +69,20 @@ export interface SchemaBuilderProps {
   onChange?: (schema: JSONSchema, validationErrors: SchemaBuilderValidationError[]) => void;
 }
 
+export interface SchemaBuilderHelperContentEntry {
+  longDetails: string;
+  label?: string;
+}
+
+export type SchemaBuilderHelperContent = Record<string, string | SchemaBuilderHelperContentEntry>;
+
+export interface SchemaBuilderHelperProps {
+  debounceMs?: number;
+  maxResults?: number;
+  placeholder?: string;
+  helpContent?: SchemaBuilderHelperContent;
+}
+
 export interface SchemaBuilderValidationError {
   message: string;
   keyword?: string;

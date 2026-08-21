@@ -1,6 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import parse from "html-react-parser";
-import type { SchemaBuilderProps, SchemaBuilderValidationError } from "../types/components";
+import type {
+  SchemaBuilderHelperContent,
+  SchemaBuilderHelperContentEntry,
+  SchemaBuilderHelperProps,
+  SchemaBuilderProps,
+  SchemaBuilderValidationError
+} from "../types/components";
 import type { JSONSchema, JSONSchemaType } from "../types/schema";
 import { AJV_SUPPORTED_FORMATS, createAjvForSchema } from "../utils/schemaValidation";
 
@@ -429,6 +436,277 @@ function resolveHelpDefinition(keywordOrLabel: string): KeywordHelpDefinition {
       "For exact semantics, check the draft 2020-12 specification section for this keyword and confirm whether your validator treats it as an assertion, annotation, or applicator.",
     link: DEFAULT_HELP_LINK
   };
+}
+
+type SchemaBuilderHelperMatch = {
+  keyword: string;
+  keywordLabel: string;
+  snippet: string;
+  score: number;
+};
+
+type SchemaBuilderHelperSourceEntry = {
+  keyword: string;
+  keywordLabel: string;
+  longDetails: string;
+};
+
+const KEYWORD_DISPLAY_LABELS: Record<string, string> = {
+  readonly: "readOnly",
+  writeonly: "writeOnly",
+  minlength: "minLength",
+  maxlength: "maxLength",
+  multipleof: "multipleOf",
+  exclusiveminimum: "exclusiveMinimum",
+  exclusivemaximum: "exclusiveMaximum",
+  additionalproperties: "additionalProperties",
+  unevaluatedproperties: "unevaluatedProperties",
+  propertynames: "propertyNames",
+  minproperties: "minProperties",
+  maxproperties: "maxProperties",
+  dependentrequired: "dependentRequired",
+  dependentschemas: "dependentSchemas",
+  patternproperties: "patternProperties",
+  prefixitems: "prefixItems",
+  minitems: "minItems",
+  maxitems: "maxItems",
+  uniqueitems: "uniqueItems",
+  mincontains: "minContains",
+  maxcontains: "maxContains",
+  unevaluateditems: "unevaluatedItems",
+  allof: "allOf",
+  anyof: "anyOf",
+  oneof: "oneOf"
+};
+
+function stripHtmlMarkup(text: string): string {
+  return text.replace(/<[^>]+>/g, "");
+}
+
+function toKeywordDisplayLabel(keyword: string): string {
+  return KEYWORD_DISPLAY_LABELS[keyword] ?? keyword;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function uniqueQueryWords(input: string): string[] {
+  const words = input
+    .toLowerCase()
+    .split(/[^$a-z0-9]+/g)
+    .filter((word) => word.length > 0);
+
+  return Array.from(new Set(words));
+}
+
+function countOccurrences(text: string, query: string): number {
+  const normalizedText = text.toLowerCase();
+  const normalizedQuery = query.toLowerCase();
+
+  if (!normalizedQuery) {
+    return 0;
+  }
+
+  let count = 0;
+  let searchIndex = 0;
+
+  while (searchIndex < normalizedText.length) {
+    const matchIndex = normalizedText.indexOf(normalizedQuery, searchIndex);
+    if (matchIndex < 0) {
+      break;
+    }
+
+    count += 1;
+    searchIndex = matchIndex + normalizedQuery.length;
+  }
+
+  return count;
+}
+
+function buildSnippet(text: string, words: string[], targetLength = 180): string {
+  if (text.length <= targetLength) {
+    return text;
+  }
+
+  const lowerText = text.toLowerCase();
+  let bestIndex = -1;
+
+  for (const word of words) {
+    const index = lowerText.indexOf(word);
+    if (index >= 0 && (bestIndex === -1 || index < bestIndex)) {
+      bestIndex = index;
+    }
+  }
+
+  const anchor = bestIndex >= 0 ? bestIndex : 0;
+  const halfWindow = Math.floor(targetLength / 2);
+  let start = Math.max(0, anchor - halfWindow);
+  let end = Math.min(text.length, start + targetLength);
+
+  if (end - start < targetLength) {
+    start = Math.max(0, end - targetLength);
+  }
+
+  const rawSlice = text.slice(start, end).trim();
+  const prefix = start > 0 ? "..." : "";
+  const suffix = end < text.length ? "..." : "";
+  return `${prefix}${rawSlice}${suffix}`;
+}
+
+function renderHighlightedSnippet(snippet: string, words: string[]): ReactNode[] {
+  if (words.length === 0) {
+    return [snippet];
+  }
+
+  const pattern = new RegExp(`(${words.map((word) => escapeRegExp(word)).sort((a, b) => b.length - a.length).join("|")})`, "gi");
+  const parts = snippet.split(pattern);
+  const lowerWords = new Set(words.map((word) => word.toLowerCase()));
+
+  return parts.map((part, index) => {
+    if (part && lowerWords.has(part.toLowerCase())) {
+      return <strong key={`snippet-part-${index}`}>{part}</strong>;
+    }
+
+    return part;
+  });
+}
+
+function resolveHelperContentEntries(helpContent?: SchemaBuilderHelperContent): SchemaBuilderHelperSourceEntry[] {
+  if (!helpContent) {
+    return Object.entries(FIELD_HELP_LONG_DETAILS).map(([keyword, longDetails]) => ({
+      keyword,
+      keywordLabel: toKeywordDisplayLabel(keyword),
+      longDetails
+    }));
+  }
+
+  const resolved = new Map<string, SchemaBuilderHelperSourceEntry>();
+
+  for (const [rawKey, rawEntry] of Object.entries(helpContent)) {
+    const keyword = normalizeHelpKey(rawKey);
+    if (!keyword) {
+      continue;
+    }
+
+    const entry: SchemaBuilderHelperContentEntry =
+      typeof rawEntry === "string"
+        ? { longDetails: rawEntry }
+        : {
+            longDetails: rawEntry.longDetails,
+            label: rawEntry.label
+          };
+
+    if (!entry.longDetails.trim()) {
+      continue;
+    }
+
+    const fallbackLabel = keyword in FIELD_HELP_LONG_DETAILS ? toKeywordDisplayLabel(keyword) : rawKey.trim() || keyword;
+    const keywordLabel = entry.label?.trim() || fallbackLabel;
+    resolved.set(keyword, {
+      keyword,
+      keywordLabel,
+      longDetails: entry.longDetails
+    });
+  }
+
+  return Array.from(resolved.values());
+}
+
+export function SchemaBuilderHelper({
+  debounceMs = 280,
+  maxResults = 12,
+  placeholder = "Type to search schema keyword guidance...",
+  helpContent
+}: SchemaBuilderHelperProps) {
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const helperEntries = useMemo(() => resolveHelperContentEntries(helpContent), [helpContent]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedQuery(query);
+    }, debounceMs);
+
+    return () => {
+      window.clearTimeout(handle);
+    };
+  }, [query, debounceMs]);
+
+  const matches = useMemo(() => {
+    const words = uniqueQueryWords(debouncedQuery);
+    if (words.length === 0) {
+      return [] as SchemaBuilderHelperMatch[];
+    }
+
+    const scored = helperEntries
+      .map((entry) => {
+        const plainText = stripHtmlMarkup(entry.longDetails);
+        const normalized = plainText.toLowerCase();
+
+        let matchedWords = 0;
+        let weightedHits = 0;
+        let totalHits = 0;
+
+        for (const word of words) {
+          const hits = countOccurrences(normalized, word);
+          if (hits > 0) {
+            matchedWords += 1;
+            totalHits += hits;
+            weightedHits += hits * Math.max(word.length, 1);
+          }
+        }
+
+        if (matchedWords === 0) {
+          return null;
+        }
+
+        const score = matchedWords * 100 + weightedHits * 10 + totalHits;
+        return {
+          keyword: entry.keyword,
+          keywordLabel: entry.keywordLabel,
+          snippet: buildSnippet(plainText, words),
+          score
+        } as SchemaBuilderHelperMatch;
+      })
+      .filter((entry): entry is SchemaBuilderHelperMatch => entry !== null)
+      .sort((a, b) => b.score - a.score || a.keywordLabel.localeCompare(b.keywordLabel));
+
+    return scored.slice(0, maxResults);
+  }, [debouncedQuery, helperEntries, maxResults]);
+
+  const highlightWords = useMemo(() => uniqueQueryWords(debouncedQuery), [debouncedQuery]);
+
+  return (
+    <div className="raf-helper-panel">
+      <h3 className="raf-helper-title">Keyword Assistant</h3>
+      <div className="raf-helper-subtitle">Searches keyword guidance in long-form JSON Schema notes.</div>
+
+      <input
+        className="raf-input raf-builder-control"
+        type="text"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={placeholder}
+        aria-label="Search SchemaBuilder keyword help"
+      />
+
+      <div className="raf-helper-results" role="region" aria-label="SchemaBuilder helper results">
+        {highlightWords.length === 0 ? (
+          <div className="raf-helper-empty">Start typing to see matching keyword snippets.</div>
+        ) : matches.length === 0 ? (
+          <div className="raf-helper-empty">No matching keyword guidance found.</div>
+        ) : (
+          matches.map((match) => (
+            <article className="raf-helper-snippet" key={match.keyword}>
+              <header className="raf-helper-snippet-keyword">{match.keywordLabel}</header>
+              <div className="raf-helper-snippet-body">{renderHighlightedSnippet(match.snippet, highlightWords)}</div>
+            </article>
+          ))
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function SchemaBuilder({ schema, domain, onChange }: SchemaBuilderProps) {
