@@ -6,7 +6,7 @@ import {
   type OutputData,
   type SchemaBuilderValidationError,
   type SchemaFormValidationError
-} from "react-af";
+} from "@ryanrutkin/react-af";
 import { initialProfileData, peerSchemasArray, profileSchema } from "./examples/schemas";
 import "./playground.css";
 

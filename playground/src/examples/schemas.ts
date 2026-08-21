@@ -1,4 +1,4 @@
-import type { JSONSchema } from "react-af";
+import type { JSONSchema } from "@ryanrutkin/react-af";
 
 export const profileSchema: JSONSchema = {
   $id: "https://example.com/schemas/profile",

@@ -7,8 +7,8 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "paths": {
-      "react-af": ["../src/index.ts"],
-      "react-af/*": ["../src/*"]
+      "@ryanrutkin/react-af": ["../src/index.ts"],
+      "@ryanrutkin/react-af/*": ["../src/*"]
     },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,

@@ -36,21 +36,21 @@ Use react-af if your project needs dynamic forms where structure, required field
 Install the package and peer dependencies in your React project.
 
 ```bash
-npm install react-af react react-dom ajv json-pointer-relational
+npm install @ryanrutkin/react-af react react-dom ajv json-pointer-relational
 ```
 
 Then import the components.
 
 ```tsx
-import { SchemaForm, SchemaBuilder } from "react-af";
-import "react-af/styles.css";
+import { SchemaForm, SchemaBuilder } from "@ryanrutkin/react-af";
+import "@ryanrutkin/react-af/styles.css";
 ```
 
 ## Quick Start: SchemaForm
 
 ```tsx
 import { useState } from "react";
-import { SchemaForm } from "react-af";
+import { SchemaForm } from "@ryanrutkin/react-af";
 
 const schema = {
 	$schema: "https://json-schema.org/draft/2020-12/schema",
@@ -86,7 +86,7 @@ SchemaForm onChange always carries the latest validation state, including an emp
 
 ```tsx
 import { useState } from "react";
-import { SchemaBuilder } from "react-af";
+import { SchemaBuilder } from "@ryanrutkin/react-af";
 
 export default function App() {
 	const [schema, setSchema] = useState({});
