@@ -600,4 +600,648 @@ describe("Playground regression guards", () => {
     expect(previewText).toContain('"maxLength": 12');
     expect(previewText).toContain('"format": "email"');
   });
+
+  it("supports deprecated readOnly writeOnly metadata toggles in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const deprecated = await property.findByRole("checkbox", { name: "deprecated" });
+    const readOnly = await property.findByRole("checkbox", { name: "readOnly" });
+    const writeOnly = await property.findByRole("checkbox", { name: "writeOnly" });
+
+    await user.click(deprecated);
+    await user.click(readOnly);
+    await user.click(writeOnly);
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"deprecated": true');
+    expect(previewText).toContain('"readOnly": true');
+    expect(previewText).toContain('"writeOnly": true');
+  });
+
+  it("supports examples array metadata in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const examplesInput = await property.findByRole("textbox", { name: "examples" });
+    fireEvent.change(examplesInput, {
+      target: { value: '["alpha", {"k":"v"}, 3, true, null]' }
+    });
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"examples": [');
+    expect(previewText).toContain('"alpha"');
+    expect(previewText).toContain('"k": "v"');
+    expect(previewText).toContain("3");
+    expect(previewText).toContain("true");
+    expect(previewText).toContain("null");
+  });
+
+  it("rejects invalid examples JSON while preserving last valid schema", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const examplesInput = await property.findByRole("textbox", { name: "examples" });
+    fireEvent.change(examplesInput, {
+      target: { value: '["seed"]' }
+    });
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    let preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    let previewText = preview?.textContent ?? "";
+    expect(previewText).toContain('"examples": [');
+    expect(previewText).toContain('"seed"');
+
+    fireEvent.change(examplesInput, {
+      target: { value: '["broken"' }
+    });
+
+    preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"examples": [');
+    expect(previewText).toContain('"seed"');
+    expect(previewText).not.toContain('"broken"');
+  });
+
+  it("supports multipleOf exclusiveMinimum exclusiveMaximum in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "number");
+
+    const multipleOfInput = await property.findByRole("spinbutton", { name: "multipleOf" });
+    const exclusiveMinimumInput = await property.findByRole("spinbutton", { name: "exclusiveMinimum" });
+    const exclusiveMaximumInput = await property.findByRole("spinbutton", { name: "exclusiveMaximum" });
+
+    await user.clear(multipleOfInput);
+    await user.type(multipleOfInput, "0.5");
+    await user.clear(exclusiveMinimumInput);
+    await user.type(exclusiveMinimumInput, "1");
+    await user.clear(exclusiveMaximumInput);
+    await user.type(exclusiveMaximumInput, "10");
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"multipleOf": 0.5');
+    expect(previewText).toContain('"exclusiveMinimum": 1');
+    expect(previewText).toContain('"exclusiveMaximum": 10');
+  });
+
+  it("supports minProperties and maxProperties in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "object");
+
+    const minPropertiesInput = await property.findByRole("spinbutton", { name: "minProperties" });
+    const maxPropertiesInput = await property.findByRole("spinbutton", { name: "maxProperties" });
+
+    await user.clear(minPropertiesInput);
+    await user.type(minPropertiesInput, "1");
+    await user.clear(maxPropertiesInput);
+    await user.type(maxPropertiesInput, "3");
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"minProperties": 1');
+    expect(previewText).toContain('"maxProperties": 3');
+  });
+
+  it("reports schema validation error when minProperties exceeds maxProperties", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "object");
+
+    const minPropertiesInput = await property.findByRole("spinbutton", { name: "minProperties" });
+    const maxPropertiesInput = await property.findByRole("spinbutton", { name: "maxProperties" });
+
+    await user.clear(minPropertiesInput);
+    await user.type(minPropertiesInput, "5");
+    await user.clear(maxPropertiesInput);
+    await user.type(maxPropertiesInput, "2");
+
+    const errorsHeading = await builder.findByRole("heading", { name: "SchemaBuilder Validation Errors" });
+    const errorsSection = errorsHeading.closest("section");
+    expect(errorsSection).not.toBeNull();
+
+    const errorText = (errorsSection as HTMLElement).textContent ?? "";
+    expect(errorText).toMatch(/minProperties/i);
+    expect(errorText).toMatch(/maxProperties/i);
+  });
+
+  it("rejects non-positive multipleOf values", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "number");
+
+    const multipleOfInput = await property.findByRole("spinbutton", { name: "multipleOf" });
+    await user.clear(multipleOfInput);
+    await user.type(multipleOfInput, "2");
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    let preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    let previewText = preview?.textContent ?? "";
+    expect(previewText).toContain('"multipleOf": 2');
+
+    fireEvent.change(multipleOfInput, {
+      target: { value: "0" }
+    });
+
+    preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    previewText = preview?.textContent ?? "";
+    expect(previewText).not.toContain('"multipleOf": 0');
+    expect(previewText).toContain('"multipleOf": 2');
+  });
+
+  it("supports not subschema in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    await user.click((await builder.findAllByRole("button", { name: "Add not" }))[0]);
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"not"');
+  });
+
+  it("supports propertyNames subschema in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "object");
+
+    await user.click(await property.findByRole("button", { name: "Add propertyNames" }));
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"propertyNames"');
+  });
+
+  it("clears not and propertyNames blocks from SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    await user.click((await builder.findAllByRole("button", { name: "Add not" }))[0]);
+    await user.click((await builder.findAllByRole("button", { name: "Clear not" }))[0]);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "object");
+
+    await user.click(await property.findByRole("button", { name: "Add propertyNames" }));
+    await user.click(await property.findByRole("button", { name: "Clear propertyNames" }));
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).not.toContain('"not"');
+    expect(previewText).not.toContain('"propertyNames"');
+  });
+
+  it("supports dependentRequired in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "object");
+
+    await user.click(await property.findByRole("button", { name: "Add dependentRequired Entry" }));
+
+    const dependenciesInput = await property.findByRole("textbox", { name: "Required Properties (comma-separated)" });
+    fireEvent.change(dependenciesInput, {
+      target: { value: "alpha, beta" }
+    });
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"dependentRequired"');
+    expect(previewText).toContain('"alpha"');
+    expect(previewText).toContain('"beta"');
+  });
+
+  it("supports dependentSchemas in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "object");
+
+    await user.click(await property.findByRole("button", { name: "Add dependentSchemas Entry" }));
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"dependentSchemas"');
+  });
+
+  it("supports patternProperties in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "object");
+
+    await user.click(await property.findByRole("button", { name: "Add patternProperties Entry" }));
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"patternProperties"');
+  });
+
+  it("reports validation error for invalid patternProperties regex key", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const advancedToggle = await builder.findByText("Advanced: Edit Full Schema JSON");
+    await user.click(advancedToggle);
+
+    const invalidSchema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        field: {
+          type: "object",
+          patternProperties: {
+            "[": { type: "string" }
+          }
+        }
+      }
+    };
+
+    const jsonEditor = (builderSection as HTMLElement).querySelector("textarea.raf-textarea:not(.raf-builder-control)");
+    expect(jsonEditor).not.toBeNull();
+    fireEvent.change(jsonEditor as HTMLTextAreaElement, {
+      target: { value: JSON.stringify(invalidSchema, null, 2) }
+    });
+
+    const errorsHeading = await builder.findByRole("heading", { name: "SchemaBuilder Validation Errors" });
+    const errorsSection = errorsHeading.closest("section");
+    expect(errorsSection).not.toBeNull();
+
+    const errorText = (errorsSection as HTMLElement).textContent ?? "";
+    expect(errorText).toMatch(/regex|patternProperties/i);
+  });
+
+  it("supports unevaluatedItems in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "array");
+
+    await user.click(await property.findByRole("button", { name: "Add unevaluatedItems" }));
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"unevaluatedItems"');
+  });
+
+  it("supports unevaluatedProperties in SchemaBuilder output", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const addPropertyButtons = await builder.findAllByRole("button", { name: "Add Property" });
+    await user.click(addPropertyButtons[addPropertyButtons.length - 1]);
+
+    const propertyHeading = await builder.findByText(/Property:\s*field/i);
+    const propertyEditor = propertyHeading.closest("details");
+    expect(propertyEditor).not.toBeNull();
+    const property = within(propertyEditor as HTMLElement);
+
+    const typeSelects = await property.findAllByRole("combobox");
+    await user.selectOptions(typeSelects[0], "object");
+
+    await user.click(await property.findByRole("button", { name: "Add unevaluatedProperties" }));
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"unevaluatedProperties"');
+  });
+
+  it("preserves unevaluated keywords through combinator and conditional branches", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await showSchemaBuilder(user);
+
+    const builderHeading = await screen.findByRole("heading", { name: "SchemaBuilder" });
+    const builderSection = builderHeading.closest("section");
+    expect(builderSection).not.toBeNull();
+    const builder = within(builderSection as HTMLElement);
+
+    const advancedToggle = await builder.findByText("Advanced: Edit Full Schema JSON");
+    await user.click(advancedToggle);
+
+    const schemaWithUnevaluated = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        field: {
+          type: "object",
+          allOf: [
+            {
+              type: "array",
+              unevaluatedItems: false
+            }
+          ],
+          if: {
+            type: "object"
+          },
+          then: {
+            unevaluatedProperties: false
+          }
+        }
+      }
+    };
+
+    const jsonEditor = (builderSection as HTMLElement).querySelector("textarea.raf-textarea:not(.raf-builder-control)");
+    expect(jsonEditor).not.toBeNull();
+    fireEvent.change(jsonEditor as HTMLTextAreaElement, {
+      target: { value: JSON.stringify(schemaWithUnevaluated, null, 2) }
+    });
+
+    const previewToggle = await builder.findByText("Preview JSON Schema");
+    await user.click(previewToggle);
+
+    const preview = (builderSection as HTMLElement).querySelector("pre.raf-json-preview");
+    expect(preview).not.toBeNull();
+    const previewText = preview?.textContent ?? "";
+
+    expect(previewText).toContain('"unevaluatedItems": false');
+    expect(previewText).toContain('"unevaluatedProperties": false');
+  });
 });

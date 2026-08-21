@@ -1,7 +1,7 @@
 {
   "name": "@ryanrutkin/react-af",
   "author": "Ryan Rutkin",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "React schema-driven form library",
   "license": "MIT",
   "main": "dist/index.cjs",

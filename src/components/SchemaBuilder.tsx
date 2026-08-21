@@ -159,6 +159,84 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
           onChange={(value) => onChange(assignOptionalString(schema, "description", value))}
         />
 
+        <div className="raf-builder-block">
+          <h4 className="raf-builder-heading">Meta-data</h4>
+
+          <div className="raf-builder-grid">
+            <label className="raf-checkbox-row">
+              <input
+                className="raf-checkbox"
+                type="checkbox"
+                checked={schema.deprecated === true}
+                onChange={(event) => {
+                  const next = cloneSchema(schema);
+                  if (event.target.checked) {
+                    next.deprecated = true;
+                  } else {
+                    delete next.deprecated;
+                  }
+                  onChange(next);
+                }}
+              />
+              <span>deprecated</span>
+            </label>
+
+            <label className="raf-checkbox-row">
+              <input
+                className="raf-checkbox"
+                type="checkbox"
+                checked={schema.readOnly === true}
+                onChange={(event) => {
+                  const next = cloneSchema(schema);
+                  if (event.target.checked) {
+                    next.readOnly = true;
+                  } else {
+                    delete next.readOnly;
+                  }
+                  onChange(next);
+                }}
+              />
+              <span>readOnly</span>
+            </label>
+
+            <label className="raf-checkbox-row">
+              <input
+                className="raf-checkbox"
+                type="checkbox"
+                checked={schema.writeOnly === true}
+                onChange={(event) => {
+                  const next = cloneSchema(schema);
+                  if (event.target.checked) {
+                    next.writeOnly = true;
+                  } else {
+                    delete next.writeOnly;
+                  }
+                  onChange(next);
+                }}
+              />
+              <span>writeOnly</span>
+            </label>
+          </div>
+
+          <JsonTextInput
+            label="examples"
+            value={schema.examples}
+            placeholder='e.g. ["sample", 1, true]'
+            onClear={() => {
+              const next = cloneSchema(schema);
+              delete next.examples;
+              onChange(next);
+            }}
+            onValidJson={(parsed) => {
+              if (!Array.isArray(parsed)) {
+                return;
+              }
+
+              onChange({ ...schema, examples: parsed });
+            }}
+          />
+        </div>
+
         <div className="raf-builder-grid">
           <TypeListEditor
             value={schemaTypes}
@@ -225,24 +303,52 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
         ) : null}
 
         {hasType("number") || hasType("integer") ? (
-          <div className="raf-builder-grid">
-            <TextInput
-              label="Min"
-              value={numberOrEmpty(schema.minimum)}
-              onChange={(value) => onChange(assignOptionalNumber(schema, "minimum", value))}
-              type="number"
-              step="any"
-              placeholder="e.g. 0"
-            />
-            <TextInput
-              label="Max"
-              value={numberOrEmpty(schema.maximum)}
-              onChange={(value) => onChange(assignOptionalNumber(schema, "maximum", value))}
-              type="number"
-              step="any"
-              placeholder="e.g. 100"
-            />
-          </div>
+          <>
+            <div className="raf-builder-grid">
+              <TextInput
+                label="Min"
+                value={numberOrEmpty(schema.minimum)}
+                onChange={(value) => onChange(assignOptionalNumber(schema, "minimum", value))}
+                type="number"
+                step="any"
+                placeholder="e.g. 0"
+              />
+              <TextInput
+                label="Max"
+                value={numberOrEmpty(schema.maximum)}
+                onChange={(value) => onChange(assignOptionalNumber(schema, "maximum", value))}
+                type="number"
+                step="any"
+                placeholder="e.g. 100"
+              />
+            </div>
+            <div className="raf-builder-grid">
+              <TextInput
+                label="multipleOf"
+                value={numberOrEmpty(schema.multipleOf)}
+                onChange={(value) => onChange(assignOptionalPositiveNumber(schema, "multipleOf", value))}
+                type="number"
+                step="any"
+                placeholder="e.g. 0.5"
+              />
+              <TextInput
+                label="exclusiveMinimum"
+                value={numberOrEmpty(schema.exclusiveMinimum)}
+                onChange={(value) => onChange(assignOptionalNumber(schema, "exclusiveMinimum", value))}
+                type="number"
+                step="any"
+                placeholder="e.g. 0"
+              />
+              <TextInput
+                label="exclusiveMaximum"
+                value={numberOrEmpty(schema.exclusiveMaximum)}
+                onChange={(value) => onChange(assignOptionalNumber(schema, "exclusiveMaximum", value))}
+                type="number"
+                step="any"
+                placeholder="e.g. 100"
+              />
+            </div>
+          </>
         ) : null}
 
         {hasType("object") ? (
@@ -256,6 +362,7 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
         <CombinationEditor kind="allOf" schema={schema} onChange={onChange} />
         <CombinationEditor kind="anyOf" schema={schema} onChange={onChange} />
         <CombinationEditor kind="oneOf" schema={schema} onChange={onChange} />
+        <SingleSchemaEditor kind="not" schema={schema} onChange={onChange} />
         <ConditionalSchemaEditor kind="if" schema={schema} onChange={onChange} />
         <ConditionalSchemaEditor kind="then" schema={schema} onChange={onChange} />
         <ConditionalSchemaEditor kind="else" schema={schema} onChange={onChange} />
@@ -274,12 +381,38 @@ function SchemaNodeEditor({ schema, label, onChange, onRemove, isRoot = false, d
 
 function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange: (next: JSONSchema) => void }) {
   const properties = schema.properties ?? {};
+  const dependentRequired = schema.dependentRequired ?? {};
+  const dependentSchemas = schema.dependentSchemas ?? {};
+  const patternProperties = schema.patternProperties ?? {};
   const requiredSet = new Set(schema.required ?? []);
   const additionalPropertiesEnabled = schema.additionalProperties !== false;
+  const propertyNamesSchema = isObject(schema.propertyNames) ? (schema.propertyNames as JSONSchema) : undefined;
+  const unevaluatedPropertiesSchema = isObject(schema.unevaluatedProperties)
+    ? (schema.unevaluatedProperties as JSONSchema)
+    : undefined;
 
   return (
     <div className="raf-builder-block">
       <h4 className="raf-builder-heading">Object Properties</h4>
+
+      <div className="raf-builder-grid">
+        <TextInput
+          label="minProperties"
+          value={numberOrEmpty(schema.minProperties)}
+          onChange={(value) => onChange(assignOptionalInteger(schema, "minProperties", value))}
+          type="number"
+          step="1"
+          placeholder="e.g. 0"
+        />
+        <TextInput
+          label="maxProperties"
+          value={numberOrEmpty(schema.maxProperties)}
+          onChange={(value) => onChange(assignOptionalInteger(schema, "maxProperties", value))}
+          type="number"
+          step="1"
+          placeholder="e.g. 10"
+        />
+      </div>
 
       <label className="raf-checkbox-row">
         <input
@@ -304,6 +437,209 @@ function ObjectSchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange
         />
         <span>additionalProperties</span>
       </label>
+
+      <div className="raf-button-row">
+        {!unevaluatedPropertiesSchema ? (
+          <button
+            className="raf-button raf-button-secondary"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              next.unevaluatedProperties = { type: "string" };
+              onChange(next);
+            }}
+          >
+            Add unevaluatedProperties
+          </button>
+        ) : (
+          <button
+            className="raf-button raf-button-danger"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              delete next.unevaluatedProperties;
+              onChange(next);
+            }}
+          >
+            Clear unevaluatedProperties
+          </button>
+        )}
+      </div>
+
+      {unevaluatedPropertiesSchema ? (
+        <SchemaNodeEditor
+          label="unevaluatedProperties"
+          schema={unevaluatedPropertiesSchema}
+          onChange={(nextUnevaluatedPropertiesSchema) => {
+            const next = cloneSchema(schema);
+            next.unevaluatedProperties = nextUnevaluatedPropertiesSchema;
+            onChange(next);
+          }}
+          onRemove={() => {
+            const next = cloneSchema(schema);
+            delete next.unevaluatedProperties;
+            onChange(next);
+          }}
+        />
+      ) : null}
+
+      <div className="raf-button-row">
+        {!propertyNamesSchema ? (
+          <button
+            className="raf-button raf-button-secondary"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              next.propertyNames = { type: "string" };
+              onChange(next);
+            }}
+          >
+            Add propertyNames
+          </button>
+        ) : (
+          <button
+            className="raf-button raf-button-danger"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              delete next.propertyNames;
+              onChange(next);
+            }}
+          >
+            Clear propertyNames
+          </button>
+        )}
+      </div>
+
+      {propertyNamesSchema ? (
+        <SchemaNodeEditor
+          label="propertyNames"
+          schema={propertyNamesSchema}
+          onChange={(nextPropertyNamesSchema) => {
+            const next = cloneSchema(schema);
+            next.propertyNames = nextPropertyNamesSchema;
+            onChange(next);
+          }}
+          onRemove={() => {
+            const next = cloneSchema(schema);
+            delete next.propertyNames;
+            onChange(next);
+          }}
+        />
+      ) : null}
+
+      <div className="raf-builder-block">
+        <h4 className="raf-builder-heading">dependentRequired</h4>
+        <div className="raf-button-row">
+          <button
+            className="raf-button raf-button-secondary"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              const nextEntries = { ...(next.dependentRequired ?? {}) };
+              const newKey = createUniqueEntryName(nextEntries, "field");
+              nextEntries[newKey] = [];
+              next.dependentRequired = nextEntries;
+              onChange(next);
+            }}
+          >
+            Add dependentRequired Entry
+          </button>
+        </div>
+
+        {Object.entries(dependentRequired).map(([propertyName, dependencies], index) => {
+          const serializedDependencies = Array.isArray(dependencies) ? dependencies.join(", ") : "";
+
+          return (
+            <div className="raf-builder-property" key={`dependent-required-${index}`}>
+              <div className="raf-builder-grid">
+                <TextInput
+                  label="Dependent Property"
+                  value={propertyName}
+                  onChange={(nextName) => {
+                    const normalized = nextName.trim();
+                    if (normalized === propertyName) {
+                      return;
+                    }
+
+                    const next = cloneSchema(schema);
+                    const nextEntries = { ...(next.dependentRequired ?? {}) };
+                    const existingValue = nextEntries[propertyName] ?? [];
+
+                    if (normalized === "") {
+                      delete nextEntries[propertyName];
+                      next.dependentRequired = nextEntries;
+                      onChange(next);
+                      return;
+                    }
+
+                    if (Object.prototype.hasOwnProperty.call(nextEntries, normalized)) {
+                      return;
+                    }
+
+                    nextEntries[normalized] = Array.isArray(existingValue) ? existingValue : [];
+                    delete nextEntries[propertyName];
+                    next.dependentRequired = nextEntries;
+                    onChange(next);
+                  }}
+                />
+                <TextInput
+                  label="Required Properties (comma-separated)"
+                  value={serializedDependencies}
+                  onChange={(nextValue) => {
+                    const next = cloneSchema(schema);
+                    const nextEntries = { ...(next.dependentRequired ?? {}) };
+                    nextEntries[propertyName] = parseCommaSeparatedStrings(nextValue);
+                    next.dependentRequired = nextEntries;
+                    onChange(next);
+                  }}
+                />
+              </div>
+              <div className="raf-button-row">
+                <button
+                  className="raf-button raf-button-danger"
+                  type="button"
+                  onClick={() => {
+                    const next = cloneSchema(schema);
+                    const nextEntries = { ...(next.dependentRequired ?? {}) };
+                    delete nextEntries[propertyName];
+                    next.dependentRequired = nextEntries;
+                    onChange(next);
+                  }}
+                >
+                  Remove dependentRequired Entry
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <SchemaMapEditor
+        title="dependentSchemas"
+        addButtonLabel="Add dependentSchemas Entry"
+        removeButtonLabel="Remove dependentSchemas Entry"
+        schemaMap={dependentSchemas}
+        defaultSchemaFactory={() => ({ type: "object", properties: {} })}
+        onChange={(nextMap) => {
+          const next = cloneSchema(schema);
+          next.dependentSchemas = nextMap;
+          onChange(next);
+        }}
+      />
+
+      <SchemaMapEditor
+        title="patternProperties"
+        addButtonLabel="Add patternProperties Entry"
+        removeButtonLabel="Remove patternProperties Entry"
+        schemaMap={patternProperties}
+        defaultSchemaFactory={() => ({ type: "string" })}
+        onChange={(nextMap) => {
+          const next = cloneSchema(schema);
+          next.patternProperties = nextMap;
+          onChange(next);
+        }}
+      />
 
       <div className="raf-button-row">
         <button
@@ -421,6 +757,9 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
       : undefined;
   const items = !Array.isArray(schema.items) && isObject(schema.items) ? schema.items : undefined;
   const hasContains = isObject(schema.contains);
+  const unevaluatedItemsSchema = isObject(schema.unevaluatedItems)
+    ? (schema.unevaluatedItems as JSONSchema)
+    : undefined;
 
   return (
     <div className="raf-builder-block">
@@ -627,6 +966,51 @@ function ArraySchemaEditor({ schema, onChange }: { schema: JSONSchema; onChange:
           </div>
         </>
       ) : null}
+
+      <div className="raf-button-row">
+        {!unevaluatedItemsSchema ? (
+          <button
+            className="raf-button raf-button-secondary"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              next.unevaluatedItems = { type: "string" };
+              onChange(next);
+            }}
+          >
+            Add unevaluatedItems
+          </button>
+        ) : (
+          <button
+            className="raf-button raf-button-danger"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              delete next.unevaluatedItems;
+              onChange(next);
+            }}
+          >
+            Clear unevaluatedItems
+          </button>
+        )}
+      </div>
+
+      {unevaluatedItemsSchema ? (
+        <SchemaNodeEditor
+          label="unevaluatedItems"
+          schema={unevaluatedItemsSchema}
+          onChange={(nextUnevaluatedItemsSchema) => {
+            const next = cloneSchema(schema);
+            next.unevaluatedItems = nextUnevaluatedItemsSchema;
+            onChange(next);
+          }}
+          onRemove={() => {
+            const next = cloneSchema(schema);
+            delete next.unevaluatedItems;
+            onChange(next);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -759,6 +1143,160 @@ function ConditionalSchemaEditor({
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+function SingleSchemaEditor({
+  kind,
+  schema,
+  onChange
+}: {
+  kind: "not";
+  schema: JSONSchema;
+  onChange: (next: JSONSchema) => void;
+}) {
+  const entry = isObject(schema[kind]) ? (schema[kind] as JSONSchema) : undefined;
+
+  return (
+    <div className="raf-builder-block">
+      <h4 className="raf-builder-heading">{kind}</h4>
+
+      <div className="raf-button-row">
+        {!entry ? (
+          <button
+            className="raf-button raf-button-primary"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              next[kind] = { type: "string" };
+              onChange(next);
+            }}
+          >
+            Add {kind}
+          </button>
+        ) : (
+          <button
+            className="raf-button raf-button-secondary"
+            type="button"
+            onClick={() => {
+              const next = cloneSchema(schema);
+              delete next[kind];
+              onChange(next);
+            }}
+          >
+            Clear {kind}
+          </button>
+        )}
+      </div>
+
+      {entry ? (
+        <SchemaNodeEditor
+          label={kind}
+          schema={entry}
+          onChange={(nextEntrySchema) => {
+            const next = cloneSchema(schema);
+            next[kind] = nextEntrySchema;
+            onChange(next);
+          }}
+          onRemove={() => {
+            const next = cloneSchema(schema);
+            delete next[kind];
+            onChange(next);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function SchemaMapEditor({
+  title,
+  addButtonLabel,
+  removeButtonLabel,
+  schemaMap,
+  defaultSchemaFactory,
+  onChange
+}: {
+  title: string;
+  addButtonLabel: string;
+  removeButtonLabel: string;
+  schemaMap: Record<string, JSONSchema>;
+  defaultSchemaFactory: () => JSONSchema;
+  onChange: (nextMap: Record<string, JSONSchema>) => void;
+}) {
+  return (
+    <div className="raf-builder-block">
+      <h4 className="raf-builder-heading">{title}</h4>
+
+      <div className="raf-button-row">
+        <button
+          className="raf-button raf-button-secondary"
+          type="button"
+          onClick={() => {
+            const nextMap = { ...schemaMap };
+            const newKey = createUniqueEntryName(nextMap, "field");
+            nextMap[newKey] = defaultSchemaFactory();
+            onChange(nextMap);
+          }}
+        >
+          {addButtonLabel}
+        </button>
+      </div>
+
+      {Object.entries(schemaMap).map(([entryName, entrySchema], index) => (
+        <div className="raf-builder-property" key={`${title}-${index}`}>
+          <div className="raf-builder-grid">
+            <TextInput
+              label={`${title} Key`}
+              value={entryName}
+              onChange={(nextName) => {
+                const normalized = nextName.trim();
+                if (normalized === entryName || normalized === "") {
+                  return;
+                }
+
+                const nextMap = { ...schemaMap };
+                if (Object.prototype.hasOwnProperty.call(nextMap, normalized)) {
+                  return;
+                }
+
+                nextMap[normalized] = nextMap[entryName];
+                delete nextMap[entryName];
+                onChange(nextMap);
+              }}
+            />
+          </div>
+
+          <SchemaNodeEditor
+            label={`${title}[${entryName}]`}
+            schema={entrySchema}
+            onChange={(nextEntrySchema) => {
+              const nextMap = { ...schemaMap, [entryName]: nextEntrySchema };
+              onChange(nextMap);
+            }}
+            onRemove={() => {
+              const nextMap = { ...schemaMap };
+              delete nextMap[entryName];
+              onChange(nextMap);
+            }}
+          />
+
+          <div className="raf-button-row">
+            <button
+              className="raf-button raf-button-danger"
+              type="button"
+              onClick={() => {
+                const nextMap = { ...schemaMap };
+                delete nextMap[entryName];
+                onChange(nextMap);
+              }}
+            >
+              {removeButtonLabel}
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1610,8 +2148,15 @@ function removeTypeSpecificKeywords(schema: JSONSchema, type: JSONSchemaType, ac
   if (type === "object") {
     if (!activeTypes.includes("object")) {
       delete schema.properties;
+      delete schema.patternProperties;
       delete schema.required;
+      delete schema.dependentRequired;
+      delete schema.dependentSchemas;
       delete schema.additionalProperties;
+      delete schema.unevaluatedProperties;
+      delete schema.propertyNames;
+      delete schema.minProperties;
+      delete schema.maxProperties;
     }
     return;
   }
@@ -1625,6 +2170,7 @@ function removeTypeSpecificKeywords(schema: JSONSchema, type: JSONSchemaType, ac
       delete schema.uniqueItems;
       delete schema.minContains;
       delete schema.maxContains;
+      delete schema.unevaluatedItems;
     }
     return;
   }
@@ -1640,6 +2186,9 @@ function removeTypeSpecificKeywords(schema: JSONSchema, type: JSONSchemaType, ac
     if (!(activeTypes.includes("number") || activeTypes.includes("integer"))) {
       delete schema.minimum;
       delete schema.maximum;
+      delete schema.multipleOf;
+      delete schema.exclusiveMinimum;
+      delete schema.exclusiveMaximum;
     }
   }
 }
@@ -1718,6 +2267,34 @@ function assignOptionalInteger<T extends keyof JSONSchema>(schema: JSONSchema, k
   return next;
 }
 
+function assignOptionalPositiveNumber<T extends keyof JSONSchema>(schema: JSONSchema, key: T, value: string): JSONSchema {
+  const next = cloneSchema(schema);
+
+  if (value.trim() === "") {
+    delete next[key];
+    return next;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return next;
+  }
+
+  next[key] = parsed;
+  return next;
+}
+
+function parseCommaSeparatedStrings(value: string): string[] {
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== "")
+    )
+  );
+}
+
 function createUniquePropertyName(properties: Record<string, JSONSchema>, baseName: string): string {
   if (!properties[baseName]) {
     return baseName;
@@ -1725,6 +2302,18 @@ function createUniquePropertyName(properties: Record<string, JSONSchema>, baseNa
 
   let index = 1;
   while (properties[`${baseName}${index}`]) {
+    index += 1;
+  }
+  return `${baseName}${index}`;
+}
+
+function createUniqueEntryName(entries: Record<string, unknown>, baseName: string): string {
+  if (!Object.prototype.hasOwnProperty.call(entries, baseName)) {
+    return baseName;
+  }
+
+  let index = 1;
+  while (Object.prototype.hasOwnProperty.call(entries, `${baseName}${index}`)) {
     index += 1;
   }
   return `${baseName}${index}`;
@@ -1758,6 +2347,61 @@ function sanitizeSchemaForOutput(schema: JSONSchema): JSONSchema {
     next.properties = sanitizedProperties;
   }
 
+  if (next.patternProperties) {
+    const sanitizedPatternProperties: Record<string, JSONSchema> = {};
+
+    for (const [patternKey, patternSchema] of Object.entries(next.patternProperties)) {
+      if (patternKey.trim() === "") {
+        continue;
+      }
+
+      sanitizedPatternProperties[patternKey] = sanitizeSchemaForOutput(patternSchema);
+    }
+
+    next.patternProperties = sanitizedPatternProperties;
+  }
+
+  if (next.dependentSchemas) {
+    const sanitizedDependentSchemas: Record<string, JSONSchema> = {};
+
+    for (const [propertyName, dependentSchema] of Object.entries(next.dependentSchemas)) {
+      if (propertyName.trim() === "") {
+        continue;
+      }
+
+      sanitizedDependentSchemas[propertyName] = sanitizeSchemaForOutput(dependentSchema);
+    }
+
+    next.dependentSchemas = sanitizedDependentSchemas;
+  }
+
+  if (next.dependentRequired) {
+    const sanitizedDependentRequired: Record<string, string[]> = {};
+
+    for (const [propertyName, dependencies] of Object.entries(next.dependentRequired)) {
+      if (propertyName.trim() === "") {
+        continue;
+      }
+
+      if (!Array.isArray(dependencies)) {
+        sanitizedDependentRequired[propertyName] = [];
+        continue;
+      }
+
+      const cleanedDependencies = Array.from(
+        new Set(
+          dependencies
+            .filter((entry) => typeof entry === "string")
+            .map((entry) => entry.trim())
+            .filter((entry) => entry !== "")
+        )
+      );
+      sanitizedDependentRequired[propertyName] = cleanedDependencies;
+    }
+
+    next.dependentRequired = sanitizedDependentRequired;
+  }
+
   if (Array.isArray(next.required)) {
     next.required = next.required.filter((entry) => entry.trim() !== "");
   }
@@ -1775,6 +2419,22 @@ function sanitizeSchemaForOutput(schema: JSONSchema): JSONSchema {
 
   if (isObject(next.contains)) {
     next.contains = sanitizeSchemaForOutput(next.contains as JSONSchema);
+  }
+
+  if (isObject(next.unevaluatedItems)) {
+    next.unevaluatedItems = sanitizeSchemaForOutput(next.unevaluatedItems as JSONSchema);
+  }
+
+  if (isObject(next.not)) {
+    next.not = sanitizeSchemaForOutput(next.not as JSONSchema);
+  }
+
+  if (isObject(next.unevaluatedProperties)) {
+    next.unevaluatedProperties = sanitizeSchemaForOutput(next.unevaluatedProperties as JSONSchema);
+  }
+
+  if (isObject(next.propertyNames)) {
+    next.propertyNames = sanitizeSchemaForOutput(next.propertyNames as JSONSchema);
   }
 
   for (const key of ["if", "then", "else"] as const) {
@@ -1942,6 +2602,28 @@ function validateConstAndEnumConsistency(schema: JSONSchema, schemaPointer = "")
     }
   }
 
+  if (schema.patternProperties) {
+    for (const [patternKey, patternSchema] of Object.entries(schema.patternProperties)) {
+      errors.push(
+        ...validateConstAndEnumConsistency(
+          patternSchema,
+          `${schemaPointer}/patternProperties/${escapeJsonPointerToken(patternKey)}`
+        )
+      );
+    }
+  }
+
+  if (schema.dependentSchemas) {
+    for (const [propertyName, dependentSchema] of Object.entries(schema.dependentSchemas)) {
+      errors.push(
+        ...validateConstAndEnumConsistency(
+          dependentSchema,
+          `${schemaPointer}/dependentSchemas/${escapeJsonPointerToken(propertyName)}`
+        )
+      );
+    }
+  }
+
   if (Array.isArray(schema.items)) {
     schema.items.forEach((itemSchema, index) => {
       errors.push(...validateConstAndEnumConsistency(itemSchema, `${schemaPointer}/items/${index}`));
@@ -1952,6 +2634,24 @@ function validateConstAndEnumConsistency(schema: JSONSchema, schemaPointer = "")
 
   if (isObject(schema.contains)) {
     errors.push(...validateConstAndEnumConsistency(schema.contains as JSONSchema, `${schemaPointer}/contains`));
+  }
+
+  if (isObject(schema.unevaluatedItems)) {
+    errors.push(...validateConstAndEnumConsistency(schema.unevaluatedItems as JSONSchema, `${schemaPointer}/unevaluatedItems`));
+  }
+
+  if (isObject(schema.not)) {
+    errors.push(...validateConstAndEnumConsistency(schema.not as JSONSchema, `${schemaPointer}/not`));
+  }
+
+  if (isObject(schema.unevaluatedProperties)) {
+    errors.push(
+      ...validateConstAndEnumConsistency(schema.unevaluatedProperties as JSONSchema, `${schemaPointer}/unevaluatedProperties`)
+    );
+  }
+
+  if (isObject(schema.propertyNames)) {
+    errors.push(...validateConstAndEnumConsistency(schema.propertyNames as JSONSchema, `${schemaPointer}/propertyNames`));
   }
 
   for (const key of ["if", "then", "else"] as const) {
