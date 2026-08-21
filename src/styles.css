@@ -464,8 +464,8 @@
 
 .raf-info-modal {
   position: fixed;
-  width: min(3rem, calc(100vw - 1.5rem));
-  max-width: 3rem;
+  width: min(24rem, calc(100vw - 1.5rem));
+  max-width: 24rem;
   max-height: 38vh;
   border: 0.0625rem solid #cfd7e3;
   border-radius: 0.75rem;
